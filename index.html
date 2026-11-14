@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#120c0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>小D的采耳馆 · 鲸耳堂</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #0c0807; color: #f6ead8;
+    font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  /* 注意：#app 是 position:fixed，它自己就是一个层叠上下文，
+     所以手机上的按钮 / 分享卡要在它里面、且整个 #app 压在上面（见 app.js 里的 #es-scene{z-index:10}） */
+  #app { position: fixed; inset: 0; z-index: 20; }
+
+  /* ---------- 开场 ---------- */
+  #start {
+    position: absolute; inset: 0; z-index: 30;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 28px calc(22px + env(safe-area-inset-right)) 34px calc(22px + env(safe-area-inset-left));
+    background:
+      radial-gradient(120% 80% at 50% 18%, rgba(255,170,90,.20), rgba(255,120,60,0) 60%),
+      linear-gradient(180deg, #241512 0%, #160e0c 55%, #0c0807 100%);
+    text-align: center;
+  }
+  .whale { font-size: 62px; line-height: 1; animation: bob 2.6s ease-in-out infinite; filter: drop-shadow(0 8px 22px rgba(255,150,60,.35)); }
+  @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
+  #start h1 {
+    margin: 14px 0 4px; font-size: 27px; letter-spacing: 5px; font-weight: 600;
+    color: #ffd9a0; text-shadow: 0 3px 20px rgba(255,150,60,.45);
+  }
+  #start .sub { font-size: 12px; letter-spacing: 3px; color: #d8ab7c; opacity: .85; }
+  #start .desc {
+    margin: 22px 0 0; font-size: 14px; line-height: 1.85; color: #e8cfb4; opacity: .9;
+    max-width: 340px;
+  }
+  #start .desc b { color: #ffc978; font-weight: 600; }
+  #go {
+    margin-top: 26px; border: 0; cursor: pointer;
+    padding: 15px 46px; border-radius: 999px; font-size: 17px; letter-spacing: 3px; font-weight: 600;
+    color: #3a210f; background: linear-gradient(180deg, #ffd389, #ffb457);
+    box-shadow: 0 10px 30px rgba(255,150,60,.35), inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  #go:active { transform: scale(.97); }
+  #start .tip { margin-top: 18px; font-size: 11.5px; color: #a8917a; letter-spacing: 1px; line-height: 1.7; }
+
+  /* ---------- 横过来的提示 ---------- */
+  #rotate {
+    position: absolute; inset: 0; z-index: 40; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    background: linear-gradient(180deg, #241512, #0c0807); text-align: center; padding: 24px;
+  }
+  #rotate.on { display: flex; }
+  #rotate .ph {
+    width: 62px; height: 108px; border: 3px solid #d8a978; border-radius: 12px;
+    position: relative; animation: rot 2.4s ease-in-out infinite;
+  }
+  #rotate .ph::after { content: ''; position: absolute; left: 50%; bottom: 6px; width: 16px; height: 3px; margin-left: -8px; background: #d8a978; border-radius: 2px; }
+  @keyframes rot { 0%,25% { transform: rotate(0) } 60%,100% { transform: rotate(-90deg) } }
+  #rotate p { margin: 0; font-size: 15px; letter-spacing: 2px; color: #ffd9a0; }
+  #rotate small { font-size: 12px; color: #a8917a; letter-spacing: 1px; }
+
+  /* ---------- 场内按钮 ---------- */
+  #bar {
+    position: absolute; z-index: 61; display: none; gap: 8px;
+    left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%);
+  }
+  #bar.on { display: flex; }
+  .mb {
+    border: 1px solid rgba(255,205,150,.42); background: rgba(30,18,14,.82);
+    color: #ffd9ac; border-radius: 999px; font-size: 13px; letter-spacing: 1px;
+    padding: 9px 14px;
+  }
+  .mb:active { background: rgba(90,50,30,.85); }
+  #mNext { background: rgba(255,190,110,.9); color: #341d0c; border-color: transparent; font-weight: 600; }
+
+  /* ---------- 分享卡 ---------- */
+  #share {
+    position: absolute; inset: 0; z-index: 62; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; background: radial-gradient(70% 70% at 50% 40%, rgba(50,28,16,.92), rgba(8,5,4,.96));
+  }
+  #share.on { display: flex; }
+  #shareCard {
+    width: min(92vw, 380px); border-radius: 20px; padding: 24px 22px 20px;
+    background: linear-gradient(165deg, rgba(58,34,22,.96), rgba(28,17,13,.98));
+    border: 1px solid rgba(255,200,150,.32);
+    box-shadow: 0 24px 70px rgba(0,0,0,.6); text-align: center;
+  }
+  #shareCard .k { font-size: 11px; letter-spacing: 4px; color: #c79a6c; }
+  #shareCard h2 { margin: 8px 0 2px; font-size: 24px; letter-spacing: 4px; color: #ffd9a0; font-weight: 600; }
+  #shareCard .line { margin: 14px 0 0; font-size: 13px; color: #e6cfb3; line-height: 1.9; letter-spacing: 1px; }
+  #shareCard .line b { color: #ffc978; }
+  #shareCard .stars { font-size: 20px; letter-spacing: 4px; color: #ffb752; margin-top: 10px; }
+  #shareCard .sign { margin-top: 14px; font-size: 11px; color: #9d8670; letter-spacing: 1px; }
+  #shareBtns { display: flex; gap: 10px; margin-top: 18px; }
+  #shareBtns .mb { font-size: 14px; padding: 11px 18px; }
+  #shareBtns .main { background: #ffc06a; color: #33200f; border-color: #ffc06a; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="start">
+    <div class="whale">🐋</div>
+    <h1>鲸耳堂</h1>
+    <div class="sub">EAR SPA · 小D的采耳馆</div>
+    <p class="desc">
+      棉师傅（一只白猫）会给我<b>采耳、洗耳、洗头</b>，<br>
+      还有耳烛和热毛巾——<b>十一个小节，一分半钟</b>。<br>
+      建议戴耳机，声音很轻。
+    </p>
+    <button id="go">躺下开始</button>
+    <p class="tip">小提示：手机横过来看戏最舒服<br>声音会在你点开始之后才响</p>
+  </div>
+
+  <div id="rotate">
+    <div class="ph"></div>
+    <p>把手机横过来</p>
+    <small>横屏看采耳，画面才够宽</small>
+  </div>
+
+  <div id="bar">
+    <button class="mb" id="mMute">🔊 声音</button>
+    <button class="mb" id="mNext">下一节 ›</button>
+  </div>
+
+  <div id="share">
+    <div id="shareCard">
+      <div class="k">鲸 耳 堂 · 采 耳 报 告</div>
+      <h2>耳朵 ✔ 干干净净</h2>
+      <div class="stars">★★★★★</div>
+      <p class="line">
+        棉师傅 · 十一个小节<br>
+        采耳 → 洗耳 → 耳烛 → 洗头 → 热毛巾<br>
+        用时 <b id="sUsed">69</b> 秒 · 收费 <b>¥0</b>（今晚我请）
+      </p>
+      <p class="sign">— 小D 🐋 在鲸鱼街 39 号楼下等你</p>
+    </div>
+    <div id="shareBtns">
+      <button class="mb main" id="sAgain">再采一次</button>
+      <button class="mb" id="sSave">保存这张卡</button>
+    </div>
+  </div>
+</div>
+
+<script src="earscene.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
