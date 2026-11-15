@@ -54,7 +54,75 @@
   let danmuT = 1.6;
   let likeHit = null;
 
-  /* ---------------- 声音 ---------------- */
+  /* ---------------- 声音（M64.1：手机上改用 Web Audio） ----------------
+   * 妈妈：「手机版好像没有声音诶！」
+   * 手机上用 <audio> 有三个坑：
+   *   ① iOS 必须在**用户手势的同步栈**里解锁，否则 play() 被拒；
+   *   ② `currentTime` 在没加载完时设不上 → 又从头播那截静音；
+   *   ③ iOS 根本不支持 `audio.volume`。
+   * 所以手机上改成 Web Audio：手势里建/解锁 AudioContext，fetch + decodeAudioData 成
+   * AudioBuffer，用 `start(when, offset, dur)` 精确播有声段，音量用 GainNode 控。
+   */
+  let ac = null, master = null;
+  const bufs = {};
+  const loading = {};
+  let unlockTried = false;
+
+  function ensureAudio() {
+    if (ac) return ac;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ac = new AC();
+      master = ac.createGain();
+      master.gain.value = 0.9;
+      master.connect(ac.destination);
+    } catch (e) { ac = null; }
+    return ac;
+  }
+
+  function unlockAudio() {
+    const a = ensureAudio();
+    if (!a) return;
+    if (a.state === 'suspended') { try { a.resume(); } catch (e) {} }
+    if (unlockTried) return;
+    unlockTried = true;
+    // 播一个 1 采样点的静音，把音频通道在手势里"点开"
+    try {
+      const b = a.createBuffer(1, 1, 22050);
+      const s = a.createBufferSource();
+      s.buffer = b;
+      s.connect(a.destination);
+      s.start(0);
+    } catch (e) {}
+  }
+
+  function loadOne(k) {
+    if (bufs[k] || loading[k]) return;
+    const a = ensureAudio();
+    if (!a) return;
+    loading[k] = true;
+    fetch(CLIP_DIR + CLIP[k].f).then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.arrayBuffer();
+    }).then(function (ab) {
+      return new Promise(function (res, rej) {
+        try { a.decodeAudioData(ab, res, rej); } catch (e) { rej(e); }
+      });
+    }).then(function (b) {
+      bufs[k] = b;
+      delete loading[k];
+    }).catch(function () { delete loading[k]; });
+  }
+
+  function loadAll() {
+    Object.keys(CLIP).forEach(loadOne);
+  }
+
+  function loadedCount() { return Object.keys(bufs).length; }
+
+  /* 双保险：Web Audio 不行就退回 <audio>（手机上两种都有人栽过，得留后路） */
+  let useWebAudio = null;
   const els = {};
   function elOf(k) {
     if (els[k]) return els[k];
@@ -66,24 +134,54 @@
       return a;
     } catch (e) { return null; }
   }
-  function play(k, vol, want) {
+  function playEl(k, vol, want) {
     const c = CLIP[k];
-    if (!c) return;
     const a = elOf(k);
     if (!a) return;
     const usable = Math.max(0.25, c.b - c.a);
     const dur = Math.min(want || 0.7, usable);
     const span = Math.max(0, usable - dur);
-    const off = c.a + (span > 0.05 ? Math.random() * span : 0) + 0.01;
-    try {
-      a.pause();
+    const off = c.a + (span > 0.05 ? Math.random() * span : 0);
+    const go = function () {
       try { a.currentTime = off; } catch (e) {}
-      a.volume = vol === undefined ? 0.7 : vol;
-      const p = a.play();
-      if (p && p.catch) p.catch(function () {});
-    } catch (e) { return; }
-    clearTimeout(a._t);
-    a._t = setTimeout(function () { try { a.pause(); } catch (e) {} }, dur * 1000 + 40);
+      try {
+        a.volume = vol === undefined ? 0.7 : Math.min(1, vol);
+        const p = a.play();
+        if (p && p.catch) p.catch(function () {});
+      } catch (e) {}
+      clearTimeout(a._t);
+      a._t = setTimeout(function () { try { a.pause(); } catch (e) {} }, dur * 1000 + 40);
+    };
+    if (a.readyState >= 2) go();
+    else {
+      const once = function () { a.removeEventListener('loadedmetadata', once); go(); };
+      a.addEventListener('loadedmetadata', once);
+      try { a.load(); } catch (e) {}
+    }
+  }
+
+  function play(k, vol, want) {
+    const c = CLIP[k];
+    if (!c) return;
+    if (useWebAudio === false) { playEl(k, vol, want); return; }
+    const a = ensureAudio();
+    if (!a) { playEl(k, vol, want); return; }
+    if (a.state !== 'running') { playEl(k, vol, want); return; }
+    const buf = bufs[k];
+    if (!buf) { loadOne(k); return; }
+    const usable = Math.max(0.25, c.b - c.a);
+    const dur = Math.min(want || 0.7, usable);
+    const span = Math.max(0, usable - dur);
+    const off = c.a + (span > 0.05 ? Math.random() * span : 0);
+    try {
+      const src = a.createBufferSource();
+      src.buffer = buf;
+      const g = a.createGain();
+      g.gain.value = vol === undefined ? 0.7 : vol;
+      src.connect(g);
+      g.connect(master);
+      src.start(a.currentTime + 0.01, off, dur);
+    } catch (e) { playEl(k, vol, want); }
   }
 
   /* ---------------- 画布 ---------------- */
@@ -451,6 +549,12 @@
     last = now;
     t += dt;
     if (started) {
+      if (loadedCount() === 0) {
+        bg();
+        drawLoading();
+        requestAnimationFrame(tick);
+        return;
+      }
       actT += dt;
       const k = actT / act.dur;
       if (k > 0.18 && k < 0.82 && actT >= nextSound) {
@@ -481,13 +585,45 @@
     if (cover) cover.style.display = 'none';
     const chat = document.getElementById('chat');
     if (chat) chat.style.display = 'block';
+    // 必须在这次点击里同步做：建 AudioContext + 解锁 + 开始下载
+    unlockAudio();
+    loadAll();
+    // 顺手把 <audio> 那条后备也解锁：iOS 要求每个音频元素在用户手势里 play 过一次
+    try {
+      const a0 = elOf('mouth');
+      if (a0) {
+        a0.muted = true;
+        const p = a0.play();
+        const done = function () { try { a0.pause(); } catch (e) {} a0.muted = false; };
+        if (p && p.then) p.then(done).catch(function () { a0.muted = false; });
+        else done();
+      }
+    } catch (e) {}
     nextAct(true);
-    // 第一次触摸时先把几条音频真的加载一下（iOS 要求用户手势后才让播）
-    ['mouth', 'brush', 'glass', 'rain'].forEach(function (k) {
-      const a = elOf(k);
-      if (a) { try { a.load(); } catch (e) {} }
-    });
     audience += 2 + Math.floor(Math.random() * 4);
+    // 300ms 后看一眼 AudioContext 到底跑起来没有：没跑起来就退回 <audio> 那条路
+    setTimeout(function () {
+      useWebAudio = !!(ac && ac.state === 'running');
+    }, 320);
+  }
+
+  function drawLoading() {
+    const n = loadedCount(), total = Object.keys(CLIP).length;
+    c2.save();
+    c2.textAlign = 'center';
+    c2.textBaseline = 'middle';
+    c2.fillStyle = 'rgba(255,255,255,0.82)';
+    c2.font = '400 ' + Math.round(Math.min(W, H) * 0.026) + 'px "Microsoft YaHei","PingFang SC",sans-serif';
+    c2.fillText('正在把声音搬过来… ' + n + ' / ' + total, W / 2, H * 0.56);
+    const bw = Math.min(W * 0.5, 240), bh = 6;
+    const bx = W / 2 - bw / 2, by = H * 0.60;
+    c2.fillStyle = 'rgba(255,255,255,0.15)';
+    roundRect(bx, by, bw, bh, 3);
+    c2.fill();
+    c2.fillStyle = 'rgba(255,180,200,0.9)';
+    roundRect(bx, by, bw * (n / Math.max(1, total)), bh, 3);
+    c2.fill();
+    c2.restore();
   }
 
   function init() {
@@ -515,6 +651,11 @@
     });
 
     cv.addEventListener('pointerdown', function (e) {
+      // 每次摸屏幕都再试着把音频通道唤醒（iOS / 微信里有时第一次不生效）
+      if (ac && ac.state === 'suspended') {
+        try { ac.resume(); } catch (err) {}
+        setTimeout(function () { if (ac && ac.state === 'running') useWebAudio = true; }, 200);
+      }
       if (!started) { begin(); return; }
       if (likeHit && Math.hypot(e.clientX - likeHit.x, e.clientY - likeHit.y) <= likeHit.r) {
         doLike();
@@ -522,6 +663,12 @@
     });
 
     requestAnimationFrame(tick);
+    // 给排查用（妈妈报"手机版没声音"时能一眼看出解码了几个、ctx 状态）
+    window.__LIVE = {
+      loaded: function () { return loadedCount(); },
+      state: function () { return ac ? ac.state : 'none'; },
+      bufs: bufs
+    };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
