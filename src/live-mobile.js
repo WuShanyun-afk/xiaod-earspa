@@ -87,15 +87,35 @@
     if (a.state === 'suspended') { try { a.resume(); } catch (e) {} }
     if (unlockTried) return;
     unlockTried = true;
-    // 播一个 1 采样点的静音，把音频通道在手势里"点开"
     try {
-      const b = a.createBuffer(1, 1, 22050);
+      // M64.2：iOS / 微信要「真的有一段时长」的 buffer 才算解锁（1 帧不够）
+      const len = Math.max(1, Math.floor(a.sampleRate * 0.3));
+      const b = a.createBuffer(1, len, a.sampleRate);
       const s = a.createBufferSource();
       s.buffer = b;
       s.connect(a.destination);
       s.start(0);
     } catch (e) {}
   }
+
+  // 微信内置浏览器：音频要等 WeixinJSBridgeReady 之后才能放
+  function hookWeixin() {
+    try {
+      if (typeof WeixinJSBridge === 'undefined') return;
+      document.addEventListener('WeixinJSBridgeReady', function () {
+        unlockAudio();
+        if (ac && ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
+      }, false);
+    } catch (e) {}
+  }
+  hookWeixin();
+  let wxTries = 0;
+  const wxTimer = setInterval(function () {
+    if (typeof WeixinJSBridge !== 'undefined' || ++wxTries > 24) {
+      clearInterval(wxTimer);
+      hookWeixin();
+    }
+  }, 300);
 
   function loadOne(k) {
     if (bufs[k] || loading[k]) return;
@@ -123,6 +143,8 @@
 
   /* 双保险：Web Audio 不行就退回 <audio>（手机上两种都有人栽过，得留后路） */
   let useWebAudio = null;
+  let lastInfo = 'none';
+  let needTap = false;   // 被浏览器拦过 → 提示用户点一下
   const els = {};
   function elOf(k) {
     if (els[k]) return els[k];
@@ -137,7 +159,7 @@
   function playEl(k, vol, want) {
     const c = CLIP[k];
     const a = elOf(k);
-    if (!a) return;
+    if (!a) { lastInfo = k + ' no-el'; return; }
     const usable = Math.max(0.25, c.b - c.a);
     const dur = Math.min(want || 0.7, usable);
     const span = Math.max(0, usable - dur);
@@ -147,16 +169,24 @@
       try {
         a.volume = vol === undefined ? 0.7 : Math.min(1, vol);
         const p = a.play();
-        if (p && p.catch) p.catch(function () {});
-      } catch (e) {}
+        if (p && p.catch) p.catch(function () { lastInfo = k + '@' + off.toFixed(1) + ' blocked'; needTap = true; });
+        lastInfo = k + '@' + off.toFixed(1) + ' el';
+      } catch (e) { lastInfo = k + ' el-err'; needTap = true; }
       clearTimeout(a._t);
       a._t = setTimeout(function () { try { a.pause(); } catch (e) {} }, dur * 1000 + 40);
     };
-    if (a.readyState >= 2) go();
-    else {
-      const once = function () { a.removeEventListener('loadedmetadata', once); go(); };
+    if (a.readyState >= 2) { go(); return; }
+    if (!a._wait) {
+      a._wait = true;
+      const once = function () {
+        a._wait = false;
+        a.removeEventListener('canplay', once);
+        a.removeEventListener('loadedmetadata', once);
+        go();
+      };
+      a.addEventListener('canplay', once);
       a.addEventListener('loadedmetadata', once);
-      try { a.load(); } catch (e) {}
+      if (a.readyState === 0) { try { a.load(); } catch (e) {} }
     }
   }
 
@@ -181,6 +211,7 @@
       src.connect(g);
       g.connect(master);
       src.start(a.currentTime + 0.01, off, dur);
+      lastInfo = k + '@' + off.toFixed(1) + ' wa';
     } catch (e) { playEl(k, vol, want); }
   }
 
@@ -514,6 +545,15 @@
     c2.font = '400 ' + Math.round(small * 0.7) + 'px "Microsoft YaHei",sans-serif';
     c2.fillText('点赞 ' + likes, bx, by + r * 0.86);
 
+    if (needTap) {
+      c2.save();
+      c2.textAlign = 'center';
+      c2.font = '700 ' + Math.round(small * 0.92) + 'px "Microsoft YaHei","PingFang SC",sans-serif';
+      c2.fillStyle = 'rgba(255,220,120,' + (0.55 + 0.45 * Math.abs(Math.sin(t * 3))) + ')';
+      c2.fillText('🔈 点一下屏幕，把声音打开', W / 2, H * 0.70);
+      c2.restore();
+    }
+
     if (reply) {
       reply.t += dt;
       const a = Math.min(1, reply.t * 2);
@@ -657,6 +697,14 @@
         setTimeout(function () { if (ac && ac.state === 'running') useWebAudio = true; }, 200);
       }
       if (!started) { begin(); return; }
+      if (needTap) {
+        needTap = false;
+        unlockAudio();
+        if (ac && ac.state === 'suspended') { try { ac.resume(); } catch (err) {} }
+        // 这一下是真实触摸：直接用 <audio> 放一条，能把通道彻底打开
+        playEl('mouth', 0.65, 0.6);
+        return;
+      }
       if (likeHit && Math.hypot(e.clientX - likeHit.x, e.clientY - likeHit.y) <= likeHit.r) {
         doLike();
       }
@@ -669,6 +717,20 @@
       state: function () { return ac ? ac.state : 'none'; },
       bufs: bufs
     };
+    // 手机上排查：打开 ...live.html?debug=1 会在左下角显示音频状态
+    if (/[?&]debug=1/.test(location.search)) {
+      const d = document.createElement('div');
+      d.id = 'dbg';
+      d.style.cssText = 'position:fixed;left:8px;bottom:70px;z-index:40;font:11px/1.6 monospace;' +
+        'color:#9df0a8;background:rgba(0,0,0,0.62);padding:7px 9px;border-radius:8px;white-space:pre;max-width:92vw';
+      document.body.appendChild(d);
+      setInterval(function () {
+        const n = loadedCount();
+        d.textContent = 'ctx=' + (ac ? ac.state : 'none') + '  bufs=' + n +
+          '\npath=' + (useWebAudio === false ? 'audio' : (useWebAudio === null ? '?' : 'webaudio')) +
+          '\nlast=' + lastInfo + '\nua=' + navigator.userAgent.slice(0, 42);
+      }, 400);
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
