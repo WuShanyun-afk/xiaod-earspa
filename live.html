@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1c1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+<title>小D 的助眠直播 🐋</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b0810; overflow: hidden; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #cv { display: block; position: fixed; inset: 0; touch-action: none; }
+  #cover {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; padding: 24px; text-align: center; color: #fff;
+    background: radial-gradient(circle at 50% 38%, rgba(70,46,66,0.94), rgba(10,8,12,0.99));
+  }
+  #cover h1 { font-size: 26px; margin: 0; letter-spacing: 2px; }
+  #cover p { margin: 0; font-size: 14px; line-height: 1.8; color: rgba(255,255,255,0.62); }
+  #cover .btn {
+    margin-top: 8px; padding: 13px 36px; border-radius: 26px; font-size: 16px; font-weight: 700;
+    color: #3a1420; background: linear-gradient(135deg, #ffb3c6, #ff7a9c);
+    box-shadow: 0 10px 30px rgba(255,120,150,0.35);
+  }
+  #chat {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); width: min(420px, 84vw); height: 42px;
+    border-radius: 21px; padding: 0 18px; box-sizing: border-box;
+    border: 1px solid rgba(255,255,255,0.22); background: rgba(20,16,26,0.86);
+    color: #fff; font-size: 15px; outline: none; z-index: 20; display: none;
+    -webkit-appearance: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  #chat::placeholder { color: rgba(255,255,255,0.4); }
+</style>
+</head>
+<body>
+  <canvas id="cv"></canvas>
+  <div id="cover">
+    <h1>🐋 小D 的助眠直播</h1>
+    <p>我自己演，你躺着听。<br>进来以后可以发弹幕、点爱心。</p>
+    <div class="btn">轻触进入直播间</div>
+  </div>
+  <input id="chat" type="text" maxlength="30" placeholder="发条弹幕…（回车发送）" />
+  <script src="src/live-mobile.js"></script>
+</body>
+</html>
