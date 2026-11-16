@@ -713,20 +713,44 @@ XD.Interact = (function () {
     }
   }
 
+  /* M81：准星指着、但还没走到跟前的东西 —— 给一句"走近点"，
+   * 别让人以为"明明看着有东西却点不动"是坏了。只做提示，不参与点击。 */
+  function farHint(nx, ny) {
+    if (!modeWalk()) return null;
+    _v2.set(nx, ny);
+    raycaster.setFromCamera(_v2, camera);
+    const hits = raycaster.intersectObjects(hots, false);
+    for (let i = 0; i < hits.length; i++) {
+      const h = hits[i].object.userData.hot;
+      if (!h) continue;
+      if (hits[i].distance > reach * 2.4) break;
+      if (!hotActive(h)) continue;
+      if (blocked(hits[i].point, hits[i].distance)) continue;
+      return h;
+    }
+    return null;
+  }
+
   function refreshHover(force) {    if (!refs) return;
     const walk = refs.getMode() === 'walk';
     let nx = ndc.x, ny = ndc.y;
     if (walk) { nx = 0; ny = 0; }
-    const h = pick(nx, ny);
+    let h = pick(nx, ny);
+    let far = false;
+    if (!h && walk) {
+      const f = farHint(nx, ny);
+      if (f) { h = f; far = true; }
+    }
     const changed = (h !== hover);
     hover = h;
 
     const el = document.getElementById('hot');
     const cross = document.getElementById('cross');
-    if (cross) cross.classList.toggle('hit', !!h);
+    if (cross) cross.classList.toggle('hit', !!h && !far);
     if (!el) return;
     if (h) {
-      el.textContent = h.label + '　点一下';
+      el.textContent = h.label + (far ? '　走近点' : '　点一下');
+      el.classList.toggle('far', far);
       el.classList.add('show');
       if (walk) {
         const r = refs.renderer.domElement.getBoundingClientRect();

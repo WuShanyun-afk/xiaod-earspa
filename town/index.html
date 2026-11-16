@@ -438,6 +438,8 @@
     opacity: 0; transition: opacity .14s ease, transform .14s ease;
   }
   #hot.show { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  /* M81：准星指着但还没走到跟前 —— 暖色，写"走近点" */
+  #hot.far { border-color: rgba(255,206,150,.45); color: #ffdfb8; }
 
   /* 第一人称的准星 */
   #cross {
