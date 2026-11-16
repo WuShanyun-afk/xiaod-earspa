@@ -671,6 +671,9 @@
    * 手机上点格子和（还能用的）#views 按钮走的都是这个函数。 */
   function handleViewClick(v) {
     if (!v) return;
+    /* M80.1：演示在跑的时候点视角/走进去，两个镜头会抢方向盘（妈妈报的"演示有 bug"）。
+     * 演示是小D在演，别人一动镜头就该让位。 */
+    if (demo && demo.isPlaying()) demo.stop();
     if (v === 'home') {                     // M72：小手机里的「回家」
       travelTo('home');
       return;
@@ -854,6 +857,10 @@
   }
 
   function enterWalk() {
+    // M80.1：兜底 —— 演示还在演的话先收掉（不然 demo.update 和走路抢镜头）
+    if (demo && demo.isPlaying()) demo.stop();
+    // 楼层的"阁楼"状态只在走路时有效，别让它漏进新的第一人称
+    if (state.floor === 'attic') state.floor = '1f';
     state.mode = 'walk';
     state.walk = makeWalk();
     controls.enabled = false;
@@ -885,6 +892,12 @@
     if (state.venue === 'flower') { travelTo('street'); return; }  // M47：从花店出来回街上
     state.mode = 'house';
     state.walk = null;
+    /* M80.1：从阁楼小卧室出来，要把"楼层"也一起放下来。
+     * 以前 state.floor 留在 'attic' —— 妈妈在卧室点「🐋 小D自己来」，
+     * 演示会先替你 exitWalk，楼层却没放下来；演完再按 F 走进去，
+     * 人就站在 4.8m 高的天花板里（满屏一片白顶），HUD 还写着「我的小阁楼」。
+     * 楼层状态只在走路时才算数，出了走路就归 1f。 */
+    if (state.floor === 'attic') state.floor = '1f';
     if (document.pointerLockElement) document.exitPointerLock();
     controls.enabled = true;
     camera.position.copy(DOLLHOUSE.pos);
@@ -1192,6 +1205,7 @@
           interact.stopTour();
           tip('导览停下啦，自己逛～', 2600);
         } else {
+          if (demo && demo.isPlaying()) demo.stop();   // M80.1：导览和演示别一起抢镜头
           fly.on = false;
           interact.startTour();
           tip('自动导览开始：我带你转一圈（再按 H 或 Esc 停）', 4200);
@@ -1387,11 +1401,15 @@
     }
     if (demo.isPlaying()) { demo.stop(); }
     else {
+      const wasAttic = (state.floor === 'attic');   // M80.1：在卧室（阁楼）点演示
       if (interact && interact.isTouring()) interact.stopTour();
       fly.on = false;
       if (state.mode === 'walk') exitWalk();
+      if (state.floor === 'attic') state.floor = '1f';
       demo.start();
-      tip('小D自己走一圈给你看 🐋（再按 G 或 Esc 停下自己玩）', 4200);
+      tip(wasAttic
+        ? '先把你从阁楼接下来啦 —— 小D在楼下走一圈给你看 🐋（再按 G 或 Esc 停）'
+        : '小D自己走一圈给你看 🐋（再按 G 或 Esc 停下自己玩）', 4200);
     }
     markViews();
   }
@@ -1409,6 +1427,7 @@
       return;
     }
     if (state.mode === 'walk') exitWalk();
+    if (state.floor === 'attic') state.floor = '1f';   // M80.1：同演示，先从阁楼下来
     if (interact && interact.isTouring()) interact.stopTour();
     fly.on = false;
     if (demo.isAuto()) {
