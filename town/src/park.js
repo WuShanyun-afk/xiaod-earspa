@@ -2652,6 +2652,8 @@ XD.Park = (function () {
       id: 'park-mist', label: '水雾拱门',
       box: [-6.0, 1.4, -40.5, 2.9, 2.8, 1.0],
       anchor: [-6.0, 3.0, -40.5],
+      // M81：水雾拱门立在地喷步道中间，步道的大盒子会先挡到 → 拱门优先
+      prio: 2,
       when: when,
       onClick: function () {
         mistOn = !mistOn;

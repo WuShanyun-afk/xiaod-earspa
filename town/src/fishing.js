@@ -1575,7 +1575,9 @@ XD.Fishing = (function () {
         // 水面：抛竿 / 收杆
         interact.add({
           id: 'fish-water', label: '水面',
-          box: [207.0, 0.10, 0.2, 5.6, 1.1, 5.4],
+          // M81：以前这块水面热区有 1.1m 厚（-0.45~0.65），整个盖在小船上面 ——
+          // 妈妈点小船永远点到"水面"。改成贴着水面的一层薄板，小船就能露出来了。
+          box: [207.0, WATER_Y + 0.02, 0.2, 5.6, 0.18, 5.4],
           anchor: [206.2, 0.5, 0.3],
           when: function () { return !!isFishNow(); },
           onClick: function () { tap(); },
@@ -1656,6 +1658,8 @@ XD.Fishing = (function () {
           id: 'fish-boat', label: '小船',
           box: [BOAT.x, WATER_Y + 0.2, BOAT.z, 1.5, 0.7, 1.1],
           anchor: [BOAT.x, WATER_Y + 0.6, BOAT.z],
+          // M81：小船浮在水面里，水面那个大盒子会先挡到 → 小船优先
+          prio: 2,
           when: function () { return !!isFishNow(); },
           onClick: function () {
             if (sfx && sfx.blip) sfx.blip();

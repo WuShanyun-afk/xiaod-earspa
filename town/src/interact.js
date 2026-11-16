@@ -199,6 +199,7 @@ XD.Interact = (function () {
   });
 
   function addHot(o) {
+    o.prio = o.prio || 0;      // M81：优先级（默认 0 = 老规矩，谁先碰到算谁）
     const m = new THREE.Mesh(new THREE.BoxGeometry(o.box[3], o.box[4], o.box[5]), hotMat);
     m.position.set(o.box[0], o.box[1], o.box[2]);
     m.name = 'hot-' + o.id;
@@ -210,22 +211,63 @@ XD.Interact = (function () {
     return o;
   }
 
+  /* M81：when 条件写坏了别把整个"点东西"拖垮。
+   * 以前 pick 里直接 h.when()，只要有一个模块的 when 抛错（比如引用了还没建好的变量），
+   * 准星就一直点不出东西，而且报错还被 pointerup 的 try 吞掉，特别难查。
+   * 现在单独包一层：抛错就当"这个热区不激活"，并记一笔 warning（只记一次）。 */
+  let whenWarned = {};
+  function hotActive(h) {
+    if (h.enabled === false) return false;
+    if (!h.when) return true;
+    try { return !!h.when(); } catch (e) {
+      if (!whenWarned[h.id]) {
+        whenWarned[h.id] = 1;
+        if (window.console) console.warn('[小D] 热区 ' + h.id + ' 的 when 条件出错：', e && e.message);
+      }
+      return false;
+    }
+  }
+
+  /* M81：可及距离 / 墙体遮挡都要分"看"和"走"两种模式。
+   * M51 给每个场景定了 reach（家里 3.6m）+ 墙体遮挡，本意是"第一人称要走到东西跟前才点得到"；
+   * 但样板间视角（house）相机站在屋子外面 9~14m，3.6m 把**屋里所有家具全挡了**，
+   * 墙又正好夹在镜头和家具中间 —— 开头那句"点屋里的东西试试"点了没反应，就是这里。
+   * 看的时候按视野给（60m）且不查遮挡，走的时候才按场景 reach + 遮挡。 */
+  function modeWalk() {
+    return !refs || !refs.getMode || refs.getMode() === 'walk';
+  }
+
   function pick(nx, ny) {
     _v2.set(nx, ny);
     raycaster.setFromCamera(_v2, camera);
     const hits = raycaster.intersectObjects(hots, false);
+    const walking = modeWalk();
+    const lim = walking ? reach : Math.max(reach, 60);
+    let best = null, bestPrio = -1, d0 = Infinity;
     for (let i = 0; i < hits.length; i++) {
       const h = hits[i].object.userData.hot;
       if (!h) continue;
-      if (h.enabled === false) continue;
-      if (hits[i].distance > reach) continue;   // 太远就别点了（按场景给的可及距离）
-      if (h.when && !h.when()) continue;        // 不在这个场景就不给点（M17 便利店）
-      // M51：隔着墙不给点（妈妈：「站在门外准星却指着浴缸」）
-      if (blocked(hits[i].point, hits[i].distance)) continue;
-      h._lastHit = hits[i].point;               // M34：点在哪（乐园里点水面 = 让它潜到那儿）
-      return h;
+      if (hits[i].distance > lim) continue;     // 太远就别点了（按场景给的可及距离）
+      if (!hotActive(h)) continue;              // 不在这个场景就不给点（M17 便利店）
+      // M51：隔着墙不给点（妈妈：「站在门外准星却指着浴缸」）—— 只对第一人称生效
+      if (walking && blocked(hits[i].point, hits[i].distance)) continue;
+      const dist = hits[i].distance;
+      if (!best) {
+        best = h; bestPrio = h.prio || 0; d0 = dist;
+        h._lastHit = hits[i].point;             // M34：点在哪（乐园里点水面 = 让它潜到那儿）
+        continue;
+      }
+      /* M81：优先级 —— 大件（喷泉/水面/步道）的盒子会盖住小东西（鸽子/小船/水雾拱门），
+       * 以前按"谁先被射线碰到"算，大件反而赢。现在贴着大件的小热区可以写 prio: 2，
+       * 第一命中 0.55m 以内有更高优先级就用它。默认 0 = 完全维持老行为。 */
+      if (dist > d0 + 0.55) break;
+      const prio = h.prio || 0;
+      if (prio > bestPrio) {
+        best = h; bestPrio = prio;
+        h._lastHit = hits[i].point;
+      }
     }
-    return null;
+    return best;
   }
 
   /* ================= M51：被墙挡住 / 距离 =================
@@ -343,11 +385,29 @@ XD.Interact = (function () {
     return solids.length;
   }
 
+  /* M81：一个模块的 say/onClick 出错，别让"点东西"整条路断掉 */
+  let sayWarned = {};
+  function hotError(kind, h, e) {
+    const k = kind + ':' + (h && h.id);
+    if (sayWarned[k]) return;
+    sayWarned[k] = 1;
+    if (window.console) console.warn('[小D] 热区 ' + (h && h.id) + ' 的 ' + kind + ' 出错：', e && e.message);
+  }
+
   function textOf(h) {
     const s = h.say;
     // 调用时把热区当 this 传进去 —— 很多模块的 say 里用 this._say 记"上一次说的话"
     // （以前是裸调用 s(h)，严格模式下 this 是 undefined，一点就报错）
-    return typeof s === 'function' ? s.call(h, h) : s;
+    if (typeof s !== 'function') return s;
+    try { return s.call(h, h); } catch (e) { hotError('say', h, e); return null; }
+  }
+
+  function clickHot(h, life) {
+    if (!h) return false;
+    if (h.onClick) { try { h.onClick(h); } catch (e) { hotError('onClick', h, e); } }
+    const text = textOf(h);
+    if (text) { try { sayAt(h.anchor, text, life); } catch (e) { hotError('sayAt', h, e); } }
+    return true;
   }
 
   function doClick(nx, ny) {
@@ -355,9 +415,7 @@ XD.Interact = (function () {
     if (!h) return false;
     hover = h;
     blip();
-    if (h.onClick) h.onClick(h);
-    const text = textOf(h);
-    if (text) sayAt(h.anchor, text);
+    clickHot(h);
     return true;
   }
 
@@ -1053,9 +1111,7 @@ XD.Interact = (function () {
           const h = hots[i].userData.hot;
           if (h.id === id) {
             blip();
-            if (h.onClick) h.onClick(h);
-            const text = textOf(h);
-            if (text) sayAt(h.anchor, text, life);
+            clickHot(h, life);
             return true;
           }
         }

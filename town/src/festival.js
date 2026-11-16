@@ -479,10 +479,14 @@ XD.Festival = (function () {
     // 热区（在柜台前面；按 ry 转到世界坐标）
     const fx = Math.sin(def.ry || 0) * 0.72, fz = Math.cos(def.ry || 0) * 0.72;
     const hx = def.x + fx, hz = def.z + fz;
+    /* M81：摊位是转过来的 —— 热可可/栗子/许愿摊的柜台竖着摆（ry = ±90°），
+     * 热区盒子却一直按"横着"给的 1.5×0.9，于是许愿摊的盒子横过来压到隔壁烤红薯摊上：
+     * 妈妈点许愿卡会点到红薯。按 ry 把盒子的长边跟着转一下。 */
+    const turned = Math.abs(Math.sin(def.ry || 0)) > 0.5;
     const hot = interact.add({
       id: 'fest-' + def.kind,
       label: def.name + '（¥' + def.price + '）',
-      box: [hx, 1.02, hz, 1.5, 0.95, 0.9],
+      box: [hx, 1.02, hz, turned ? 0.92 : 1.5, 0.95, turned ? 1.5 : 0.92],
       anchor: [hx, 1.62, hz],
       when: function () { return hostRoot && hostRoot.visible; },
       onClick: function (h) { h._mute = true; buy(def); return null; },

@@ -1839,6 +1839,8 @@ XD.Street = (function () {
         id: 'plaza-pigeons', label: '鸽子',
         box: [59.0, 0.25, -18.1, 3.0, 0.6, 2.4],
         anchor: [59.0, 1.1, -18.1],
+        // M81：鸽子窝在喷泉边上，喷泉那么大的盒子会先被射线撞到 → 给鸽子更高优先级
+        prio: 2,
         when: function () { return !!isStreetNow(); },
         onClick: function () {
           if (sfx && sfx.blip) sfx.blip();

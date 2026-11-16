@@ -923,6 +923,8 @@ XD.Relax = (function () {
         id: 'relax-comfort-' + d.k, label: d.name,
         box: [d.x, d.y, d.z, d.w, d.h, d.d],
         anchor: [d.x, d.y + 0.36, d.z],
+        // M81：小道具（颂钵 / 香薰机）正好坐在软椅的大盒子里，小块优先
+        prio: (d.w * d.h * d.d < 0.35) ? 2 : 0,
         when: function () { return !!isRelaxNow(); },
         onClick: function () { useComfort(d); },
         say: d.line
