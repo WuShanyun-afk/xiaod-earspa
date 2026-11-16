@@ -658,11 +658,9 @@
     overflow-y: auto; scrollbar-width: none;
   }
   #phone .apps::-webkit-scrollbar { display: none; }
-  /* 每个格子占两列 = 一行三个；最后剩两个的时候（第 10、11 个）挪到中间那两列，
-     不然最后一行会贴在左边，看着少了一块 */
+  /* 每个格子占两列 = 一行三个。M82 加了幼儿园，正好 12 个格子 → 4 行整整齐齐，
+     原来"最后两个挪到中间"的补位规则就不用要了 */
   #phone .app { grid-column: span 2; }
-  #phone .app:nth-child(10) { grid-column: 2 / span 2; }
-  #phone .app:nth-child(11) { grid-column: 4 / span 2; }
   #phone .app {
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     padding: 2px 0; border-radius: 13px; cursor: pointer;
@@ -866,8 +864,7 @@
     body.touch #phone .apps { grid-template-columns: repeat(6, 1fr); gap: 4px 0; }
     body.touch #phone .app,
     body.touch #phone .app:nth-child(10),
-    body.touch #phone .app:nth-child(11) { grid-column: span 1; }
-    body.touch #phone .app .ic { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; }
+    body.touch #phone .app:nth-child(11) { grid-column: span 1; }    body.touch #phone .app .ic { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; }
     body.touch #phone .app .nm { font-size: 9px; max-width: 100%; }
     body.touch #phone .app .sub { display: none; }
   }
@@ -1058,6 +1055,7 @@
 <script src="src/post.js"></script>
 <script src="src/flower.js"></script>
 <script src="src/fishing.js"></script>
+  <script src="src/school.js"></script>
   <script src="src/demo.js"></script>
   <script src="src/interact.js"></script>
   <script src="src/phone.js"></script>

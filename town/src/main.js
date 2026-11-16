@@ -161,6 +161,7 @@
   let relax = null;                     // M60：解压游戏馆「鲸捏捏」（2D 小游戏 + 助眠主播）
   let flower = null;                    // M47：花店「鲸花屿」（街西侧，挑花 / 包花 / 带回家插瓶）
   let fishing = null;                   // M49：鲸鱼码头（街东侧南头，抛竿 / 咬钩 / 卖鱼 / 带一条回家）
+  let school = null;                    // M82：鲸幼园（小镇东头的幼儿园，五件事换小红花）
   const elFade = document.getElementById('fade');
   const elFadeCard = document.getElementById('fadeCard');
   const fadeBig = elFadeCard ? elFadeCard.querySelector('.big') : null;
@@ -193,7 +194,8 @@
   function venueReach(v) {
     const R = {
       home: 3.6, store: 4.5, cafe: 5.0, earspa: 5.0, bakery: 5.0,
-      post: 5.0, flower: 5.0, street: 6.0, park: 14, fishing: 14, relax: 4.2
+      post: 5.0, flower: 5.0, street: 6.0, park: 14, fishing: 14, relax: 4.2,
+      school: 4.8
     };
     return R[v] || 4.0;
   }
@@ -217,6 +219,7 @@
     if (flower) flower.setVisible(v === 'flower');
     if (fishing) fishing.setVisible(v === 'fishing');
     if (relax) relax.setVisible(v === 'relax');
+    if (school) school.setVisible(v === 'school');
     if (park) park.setVisible(v === 'park');
     store.setVisible(v === 'store');
     if (v !== 'home' && interact && interact.hideBubbles) interact.hideBubbles();   // M39：出门时把家里的话气泡收掉
@@ -253,6 +256,9 @@
     } else if (v === 'relax' && relax) {
       scene.fog = null;                 // M60：解压馆是个"夜里也开着"的直播间
       renderer.toneMappingExposure = 0.98;
+    } else if (v === 'school' && school) {
+      scene.fog = null;                 // M82：幼儿园在镇子东头，天光自己管
+      renderer.toneMappingExposure = atmos.getMode() === 'day' ? 0.9 : 1.02;
     } else {
       scene.fog = fogHome;
       atmos.setMode(atmos.getMode());   // 曝光 / 背景 / 窗外颜色还回去
@@ -344,6 +350,7 @@
       flower: ['🌷 鲸花屿', '正在推门，风铃叮了一下…'],
       fishing: ['🎣 鲸鱼码头', '正在走过木栈道…'],
       relax: ['🫧 鲸捏捏', '正在掀帘子，里面嗡嗡的…'],
+      school: ['🎒 鲸幼园', '正在过马路，到幼儿园啦…'],
       home: ['🏠 家', '正在开门…'],
       store: ['🏪 便利店', '正在下楼…'],
       park: ['🎡 水上乐园', '正在检票…']
@@ -425,6 +432,11 @@
           if (state.mode !== 'walk') enterWalk();
           put(relax.spawn.x, relax.spawn.y, relax.spawn.z, relax.spawn.yaw, 0.0);
           tip('进鲸捏捏啦 🫧 点桌上的小D 她就开播（你当观众，能发弹幕、点赞），桌上六样也能自己玩', 7000);
+        } else if (where === 'school' && school) {
+          setVenue('school');
+          if (state.mode !== 'walk') enterWalk();
+          put(school.spawn.x, school.spawn.y, school.spawn.z, school.spawn.yaw, 0.0);
+          tip('到鲸幼园啦 🎒 院子里滑梯、秋千、沙坑、跳格子，教室里能画画、搭积木、睡午觉——五件事做完换小红花', 7200);
         } else {
           setVenue('home');
           if (state.mode === 'walk') {
@@ -722,6 +734,11 @@
       travelTo('fishing');
       return;
     }
+    if (v === 'school') {                   // M82：鲸幼园（全天开）
+      if (state.venue === 'school') { tip('已经在幼儿园里啦 🎒 去点滑梯 / 沙坑 / 画墙吧', 2800); return; }
+      travelTo('school');
+      return;
+    }
     if (v === 'store') {                    // M16：出门 / 回家
       travelTo(state.venue === 'store' ? 'home' : 'store');
       return;
@@ -730,7 +747,7 @@
       toggleAuto();
       return;
     }
-    if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street' || state.venue === 'cafe' || state.venue === 'earspa' || state.venue === 'bakery' || state.venue === 'post' || state.venue === 'flower' || state.venue === 'fishing' || state.venue === 'relax') {   // 在外面点别的视角按钮 = 先回家
+    if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street' || state.venue === 'cafe' || state.venue === 'earspa' || state.venue === 'bakery' || state.venue === 'post' || state.venue === 'flower' || state.venue === 'fishing' || state.venue === 'relax' || state.venue === 'school') {   // 在外面点别的视角按钮 = 先回家
       travelTo('home');
       return;
     }
@@ -848,6 +865,7 @@
   // 脚下是什么地板：浴室/便利店/乐园/街道是瓷砖，其余是木地板
   function surfaceAt(x, z) {
     if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street') return 'tile';
+    if (state.venue === 'school') return z > -2.55 ? 'tile' : 'wood';   // M82：院子里是砖地，教室是木地板
     if (state.venue === 'post') return 'tile';
     if (state.venue === 'flower') return 'wood';
     if (state.venue === 'fishing') return 'wood';   // M49：码头的木栈道
@@ -885,6 +903,7 @@
 
   function exitWalk() {
     if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street') { travelTo('home'); return; }
+    if (state.venue === 'school') { travelTo('home'); return; }    // M82：从幼儿园出来就回小屋
     if (state.venue === 'cafe') { travelTo('street'); return; }   // M41：从咖啡馆出来回街上
     if (state.venue === 'earspa') { travelTo('street'); return; }  // M43：从采耳馆出来回街上
     if (state.venue === 'bakery') { travelTo('street'); return; }  // M45：从面包房出来回街上
@@ -991,6 +1010,10 @@
       camera.position.z = r.z;
     } else if (state.venue === 'relax' && relax) {
       const r = relax.clamp(camera.position.x, camera.position.z, oldX, oldZ);
+      camera.position.x = r.x;
+      camera.position.z = r.z;
+    } else if (state.venue === 'school' && school) {
+      const r = school.clamp(camera.position.x, camera.position.z, oldX, oldZ);
       camera.position.x = r.x;
       camera.position.z = r.z;
     } else if (state.venue === 'store' && store) {
@@ -1119,6 +1142,14 @@
       if (k === ' ' || k === 'e') { e.preventDefault(); if (bakery) bakery.knead(); return; }
       if (k === 'h' || k === 'g' || k === 'j') {
         tip('演示和导览是家里那条线，先回街上再回家', 2800);
+        return;
+      }
+    }
+    // M82：在幼儿园里（R / Esc 回小屋）
+    if (state.venue === 'school') {
+      if (k === 'r') { travelTo('home'); return; }
+      if (k === 'h' || k === 'g' || k === 'j') {
+        tip('演示和导览是家里那条线，先回小屋再来', 2800);
         return;
       }
     }
@@ -1345,6 +1376,8 @@
       elMode.textContent = '🌆 鲸鱼街上　·　' + how;
     } else if (state.venue === 'cafe') {
       elMode.textContent = '☕ 咖啡馆里　·　' + how;
+    } else if (state.venue === 'school') {
+      elMode.textContent = '🎒 鲸幼园里　·　' + how;
     } else if (state.venue === 'earspa') {
       elMode.textContent = '💆 鲸耳堂 · 采耳　·　' + how;
     } else if (state.venue === 'store' && state.floor === '2f') {
@@ -1395,7 +1428,7 @@
   // 按钮 / G 键：小D自己演一遍（**不能用 D** —— 第一人称走路时 D 是往右走）
   function toggleDemo() {
     if (!demo) return;
-    if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street' || state.venue === 'cafe' || state.venue === 'earspa' || state.venue === 'bakery' || state.venue === 'post' || state.venue === 'flower') {
+    if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street' || state.venue === 'cafe' || state.venue === 'earspa' || state.venue === 'bakery' || state.venue === 'post' || state.venue === 'flower' || state.venue === 'school') {
       tip('先按「🏠 回家」，演示是我家那条线', 3000);
       return;
     }
@@ -1422,7 +1455,7 @@
   // M27：「👀 看小D玩」—— 我在屋里自己找事做，镜头跟着（J 键）
   function toggleAuto() {
     if (!demo) return;
-    if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street' || state.venue === 'cafe' || state.venue === 'earspa' || state.venue === 'bakery' || state.venue === 'post' || state.venue === 'flower') {
+    if (state.venue === 'store' || state.venue === 'park' || state.venue === 'street' || state.venue === 'cafe' || state.venue === 'earspa' || state.venue === 'bakery' || state.venue === 'post' || state.venue === 'flower' || state.venue === 'school') {
       tip('先按「🏠 回家」，看小D玩是在家里', 3000);
       return;
     }
@@ -1661,6 +1694,14 @@
     venue: function () { return state.venue; }
   }) : null;
 
+  /* ========== M82：鲸幼园（小镇东头的幼儿园，五件事换小红花） ========== */
+  school = (XD.School && XD.School.build) ? XD.School.build({
+    scene: scene, interact: interact, sfx: sfx, tip: tip,
+    isSchool: function () { return state.venue === 'school'; },
+    getMode: function () { return atmos.getMode(); },
+    onDoor: function (where) { travelTo(where); }
+  }) : null;
+
   /* ========== M34.5：把屋里所有的灯都收一份 —— 关大灯时一起暗下来 ==========
    * 后来加的房间（厨房/浴室/起居/花房/阳台/阁楼/天台…）每个都带自己的灯，
    * 以前只关"吸顶灯"，所以整间房看着还是很亮。
@@ -1679,6 +1720,7 @@
     if (post && post.root) skipRoots.push(post.root);         // M46：邮局自己管灯
     if (flower && flower.root) skipRoots.push(flower.root);   // M47：花店自己管灯
     if (fishing && fishing.root) skipRoots.push(fishing.root); // M49：码头自己管灯
+    if (school && school.root) skipRoots.push(school.root);    // M82：幼儿园自己管灯
     if (lights && lights.holder) skipRoots.push(lights.holder);   // 核心那 6 盏由 Lighting/atmos 自己管
     scene.traverse(function (o) {
       if (!o.isLight) return;
@@ -2028,7 +2070,7 @@
     updateAudioListener(dt);
 
     // M34.5：关大灯时，屋里所有的灯一起暗（放在最后：各模块这一帧的亮度已经设过了）
-    if (state.venue !== 'store' && state.venue !== 'park' && state.venue !== 'street' && state.venue !== 'earspa' && state.venue !== 'bakery' && state.venue !== 'post' && state.venue !== 'flower' && state.venue !== 'fishing') {
+    if (state.venue !== 'store' && state.venue !== 'park' && state.venue !== 'street' && state.venue !== 'earspa' && state.venue !== 'bakery' && state.venue !== 'post' && state.venue !== 'flower' && state.venue !== 'fishing' && state.venue !== 'school' && state.venue !== 'relax') {
       applyHouseLights(state.lightLevel);
     } else if (state.venue === 'street') {
       // M39：街上把家里的灯全收掉 —— 阁楼/花房那几个 Ambient/Directional 是全局的，
@@ -2046,6 +2088,8 @@
       applyHouseLights(1, true);      // M47：花店（吊灯 + 冷柜灯自己管）
     } else if (state.venue === 'fishing') {
       applyHouseLights(1, true);      // M49：码头在湖上，家里那几盏全局灯全收掉（不然夜里也是白的）
+    } else if (state.venue === 'school') {
+      applyHouseLights(1, true);      // M82：幼儿园在镇子东头，家里那几盏全局灯一起收掉
     }
 
     // M37：乐园白天把曝光压下来（妈妈：「白天曝光太强」），夜里再回到原来的亮度
@@ -2132,6 +2176,17 @@
     }
     // M49：家里餐桌上那盘鱼（每帧问一声，很轻）
     if (fishing && fishing.homeTick) fishing.homeTick(state.venue);
+
+    // M82：鲸幼园（院子 + 教室，自己的天光和吊灯）
+    if (state.venue === 'school' && school) {
+      if (lights) {
+        lights.hemi.intensity = 0;
+        lights.ambient.intensity = 0;
+        lights.win.intensity = 0;
+      }
+      renderer.toneMappingExposure = atmos.getMode() === 'day' ? 0.9 : 1.02;
+      school.update(dt, camera.position, state.mode === 'walk');
+    }
 
     const tP1 = perfOn ? performance.now() : 0;
     // M65：灯光预算 —— 只让镜头附近的几盏点光源真进 shader
@@ -2527,6 +2582,22 @@
       }
     }
 
+    // M82 鲸幼园：?venue=school 直接站到院子里（截图用）；可叠 ?pos=x,z&yaw=..&pitch=..
+    if (school && /[?&]venue=school/.test(q)) {
+      setVenue('school');
+      if (state.mode !== 'walk') enterWalk();
+      const sp = school.spawn;
+      camera.position.set(sp.x, sp.y, sp.z);
+      if (state.walk) { state.walk.yaw = sp.yaw; state.walk.pitch = 0.0; }
+      const mpkS = q.match(/[?&]pos=(-?[\d.]+),(-?[\d.]+)/);
+      if (mpkS) { camera.position.x = parseFloat(mpkS[1]); camera.position.z = parseFloat(mpkS[2]); }
+      const mykS = q.match(/[?&]yaw=(-?[\d.]+)/);
+      if (mykS && state.walk) { state.walk.yaw = parseFloat(mykS[1]); }
+      const mpikS = q.match(/[?&]pitch=(-?[\d.]+)/);
+      if (mpikS && state.walk) { state.walk.pitch = parseFloat(mpikS[1]); }
+      if (state.walk) applyWalkCamera();
+    }
+
     // M60 解压游戏馆：?venue=relax 直接进馆（截图用）；可叠 ?pos=x,z&yaw=..&pitch=..
     if (relax && /[?&]venue=relax/.test(q)) {
       setVenue('relax');
@@ -2858,6 +2929,7 @@
     loft: loft, goFloor: goFloor, greenhouse: greenhouse, roof: roof, attic: attic, goAttic: goAttic,
     street: street, park: park, parkpeople: parkpeople, cafe: cafe, life: life,
     momstore: momstore, momcafe: momcafe, jobs: jobs, relax: relax,
+    school: school,
     fest: fest,
     phone: XD.Phone || null,
     touch: XD.Touch || null

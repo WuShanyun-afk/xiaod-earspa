@@ -22,7 +22,7 @@
   const VENUE_NAME = {
     home: '家里', street: '鲸鱼街', store: '便利店', park: '游乐园',
     cafe: '咖啡馆', earspa: '采耳馆', bakery: '面包房', post: '邮局',
-    flower: '花店', fishing: '码头', relax: '鲸捏捏'
+    flower: '花店', fishing: '码头', relax: '鲸捏捏', school: '幼儿园'
   };
   // 街边那几家店：在里面点「鲸鱼街」是「回街上」
   const TOWN = ['cafe', 'earspa', 'bakery', 'post', 'flower', 'fishing'];
@@ -39,7 +39,8 @@
     { id: 'flowerbtn', go: 'flower', emoji: '🌷', c1: '#f78fa9', c2: '#8d2e51', sub: '剪花' },
     { id: 'fishbtn', go: 'fishing', emoji: '🎣', c1: '#6cc9da', c2: '#21697f', sub: '钓鱼' },
     { id: 'parkbtn', go: 'park', emoji: '🎡', c1: '#84dbff', c2: '#2c6da6', sub: '玩水' },
-    { id: 'relaxbtn', go: 'relax', emoji: '🫧', c1: '#a3ebcd', c2: '#2c7a63', sub: '解压' }
+    { id: 'relaxbtn', go: 'relax', emoji: '🫧', c1: '#a3ebcd', c2: '#2c7a63', sub: '解压' },
+    { id: 'schoolbtn', go: 'school', emoji: '🎒', c1: '#ffd08a', c2: '#b4622c', sub: '幼儿园' }
   ];
 
   /* 手机底下的四个小开关：转发给原来那几个真按钮 */
@@ -278,6 +279,7 @@
       case 'flower': return at ? '再挑一束' : '花店';
       case 'fishing': return at ? '抛一竿' : '码头';
       case 'relax': return at ? '再捏一次' : '鲸捏捏';
+      case 'school': return at ? '再玩一会儿' : '幼儿园';
       default: return d.sub;
     }
   }
