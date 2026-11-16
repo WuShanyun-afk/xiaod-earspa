@@ -859,12 +859,11 @@
   @media (max-height: 470px) {
     body.touch #phone .hero { padding: 6px 8px; margin-top: 3px; }
     body.touch #phone .sec { margin-top: 5px; }
-    /* 横屏：手机改成"宽板"—— 一行六个格子，两行就把十一家全露出来 */
+    /* 横屏：手机改成"宽板"—— 一行六个格子，两行就把十二家全露出来 */
     body.touch #phone .frame { width: min(660px, 94vw); height: 94vh; }
     body.touch #phone .apps { grid-template-columns: repeat(6, 1fr); gap: 4px 0; }
-    body.touch #phone .app,
-    body.touch #phone .app:nth-child(10),
-    body.touch #phone .app:nth-child(11) { grid-column: span 1; }    body.touch #phone .app .ic { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; }
+    body.touch #phone .app { grid-column: span 1; }
+    body.touch #phone .app .ic { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; }
     body.touch #phone .app .nm { font-size: 9px; max-width: 100%; }
     body.touch #phone .app .sub { display: none; }
   }
