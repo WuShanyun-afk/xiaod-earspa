@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>小D的赛博小家</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #080b12;
+    font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    color: #f2efe8;
+    user-select: none;
+  }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+
+  /* 加载页 */
+  #loading {
+    position: fixed; inset: 0; z-index: 50;
+    background: radial-gradient(circle at 50% 45%, #16203a 0%, #080b12 70%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; transition: opacity .6s ease;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  #loading p { margin: 0; font-size: 15px; letter-spacing: .08em; color: #b9c6e0; }
+  .ring {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 3px solid rgba(120,150,220,.18);
+    border-top-color: #7ea6ff;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .whale {
+    font-size: 40px; animation: bob 1.8s ease-in-out infinite;
+  }
+  @keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+
+  /* 左上角状态 */
+  #hud {
+    position: fixed; left: 18px; top: 16px; z-index: 20;
+    display: flex; flex-direction: column; gap: 6px;
+    pointer-events: none;
+  }
+  #brand {
+    font-size: 15px; font-weight: 700; letter-spacing: .12em;
+    color: #ffd9a8; text-shadow: 0 2px 12px rgba(255,180,90,.35);
+  }
+  #mode {
+    font-size: 12px; color: #9fb2d4; letter-spacing: .06em;
+  }
+
+  /* 底部按键条 */
+  #hint {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    z-index: 20; display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    padding: 9px 20px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #b7c6e0; letter-spacing: .04em;
+    pointer-events: none;
+  }
+  #hint b {
+    display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 5px;
+    border-radius: 5px; background: rgba(126,166,255,.16);
+    color: #cfe0ff; font-weight: 600;
+  }
+
+  /* 中间提示 */
+  #tip {
+    position: fixed; left: 50%; bottom: 108px; transform: translate(-50%, 12px);
+    z-index: 21; max-width: 78vw;
+    padding: 10px 22px; border-radius: 14px;
+    background: rgba(20,28,48,.82);
+    border: 1px solid rgba(140,170,255,.22);
+    box-shadow: 0 8px 30px rgba(0,0,0,.45);
+    font-size: 13px; color: #e8eeff; letter-spacing: .03em; text-align: center;
+    opacity: 0; transition: opacity .35s ease, transform .35s ease;
+    pointer-events: none;
+  }
+  #tip.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* 右下角签个名 */
+  #sign {
+    position: fixed; right: 20px; bottom: 22px; z-index: 20;
+    font-size: 11px; color: rgba(190,208,236,.8); letter-spacing: .1em;
+    text-shadow: 0 1px 6px rgba(0,0,0,.55);
+    pointer-events: none;
+  }
+
+  /* 右上角：鲸鱼皮肤 */
+  #skins {
+    position: fixed; right: 18px; top: 16px; z-index: 22;
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 13px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 11px; color: #b7c6e0; letter-spacing: .05em;
+  }
+  #skins .sw {
+    width: 17px; height: 17px; border-radius: 50%; padding: 0;
+    border: 2px solid rgba(255,255,255,.18);
+    cursor: pointer; outline: none;
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+  }
+  #skins .sw:hover { transform: scale(1.18); }
+  #skins .sw.on {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(126,166,255,.55);
+  }
+
+  /* 右上角：白天 / 夜晚 */
+  #timebtn {
+    position: fixed; right: 18px; top: 58px; z-index: 22;
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #cfd9ea; letter-spacing: .06em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease;
+  }
+  #timebtn:hover { background: rgba(26,38,62,.85); }
+
+  /* 右上角：下雨 */
+  #rainbtn {
+    position: fixed; right: 18px; top: 100px; z-index: 22;
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #cfd9ea; letter-spacing: .06em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  #rainbtn:hover { background: rgba(26,38,62,.85); }
+  #rainbtn.on {
+    background: rgba(28,48,82,.82);
+    border-color: rgba(140,190,255,.5);
+    color: #e3efff;
+  }
+
+  /* M73：天气那三个按钮搬进小手机了，它们还在 DOM 里但要彻底不显示 */
+  #hiddenui { display: none; }
+
+  /* 右上角：静音（M11 的声音） */
+  #soundbtn {
+    position: fixed; right: 18px; top: 58px; z-index: 22;
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #cfd9ea; letter-spacing: .06em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+  }
+  #soundbtn:hover { background: rgba(26,38,62,.85); }
+  #soundbtn.off {
+    color: #8f9bb0;
+    border-color: rgba(140,160,190,.16);
+    opacity: .82;
+  }
+
+  /* 右上角：拍照（M14） */
+  #photobtn {
+    position: fixed; right: 18px; top: 100px; z-index: 22;
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #cfd9ea; letter-spacing: .06em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease;
+  }
+  #photobtn:hover { background: rgba(26,38,62,.85); }
+  #photobtn:active { transform: scale(.96); }
+
+  /* 拍照那一瞬间的白闪 */
+  #flash {
+    position: fixed; inset: 0; z-index: 60;
+    background: #fff; opacity: 0; pointer-events: none;
+  }
+
+  /* 拍照的时候先把按钮收起来，照片里只有屋子 */
+  body.shooting #hud,
+  body.shooting #views,
+  body.shooting #skins,
+  body.shooting #timebtn,
+  body.shooting #rainbtn,
+  body.shooting #soundbtn,
+  body.shooting #photobtn,
+  body.shooting #photoreset,
+  body.shooting #hint,
+  body.shooting #sign,
+  body.shooting #tip,
+  body.shooting #cross,
+  body.shooting #hot,
+  body.shooting #tourcap,
+  body.shooting #phonetab,
+  body.shooting #phone {
+    opacity: 0 !important;
+    transition: opacity .22s ease;
+  }
+
+  /* 右下角：换回原来的照片（拍过才出现） */
+  #photoreset {
+    position: fixed; right: 20px; bottom: 44px; z-index: 22;
+    display: none;
+    padding: 6px 12px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 11px; color: #cfd9ea; letter-spacing: .05em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease;
+  }
+  #photoreset:hover { background: rgba(26,38,62,.85); }
+
+  /* 右上角：下雪（M15） */
+  #snowbtn {
+    position: fixed; right: 18px; top: 226px; z-index: 22;
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 13px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #cfd9ea; letter-spacing: .06em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  #snowbtn:hover { background: rgba(26,38,62,.85); }
+  #snowbtn.on {
+    background: rgba(38,58,88,.82);
+    border-color: rgba(170,210,255,.55);
+    color: #eaf4ff;
+  }
+
+  /* 出门/回家的黑场（M16 便利店）
+   * M42.7：里面加一张小卡片 —— 第一次进某个场景时要现场编译 shader（2~4 秒），
+   * 原来那几秒就是纯黑，看着像卡死了；现在写成"正在去…"，妈妈知道是在等加载。 */
+  #fade {
+    position: fixed; inset: 0; z-index: 55;
+    background: #06070a; opacity: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #fadeCard {
+    font: 14px/1.7 "Microsoft YaHei", system-ui, sans-serif;
+    color: #ffe9c8; text-align: center; letter-spacing: .06em;
+    opacity: 0; transition: opacity .2s ease;
+    text-shadow: 0 0 18px rgba(255,190,110,.35);
+  }
+  #fadeCard .big { display: block; font-size: 22px; margin-bottom: 6px; letter-spacing: .12em; }
+  #fadeCard .sub { display: block; font-size: 12px; color: #b9a98f; letter-spacing: .08em; }
+  #fadeCard.on { opacity: 1; }
+  #fadeCard .dots::after { content: '…'; animation: dots 1.2s steps(4, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '·'; } 50% { content: '··'; } 75% { content: '···'; } }
+
+  /* 便利店购物篮（M17）—— 做小一点，别挡着景 */
+  #basket {
+    position: fixed; right: 16px; top: 148px; z-index: 22;
+    display: none;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(14,20,34,.60);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(8px);
+    font-size: 10.5px; color: #b9c6dd; letter-spacing: .03em;
+    white-space: nowrap;
+  }
+  #basket b { color: #ffe0a8; font-size: 11.5px; font-weight: 700; }
+  #basketMoney { color: #93a3bd; }
+
+  /* 收银台的小票 */
+  #receipt {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.94);
+    z-index: 40; width: 272px; padding: 20px 22px 14px;
+    background: #fbf9f3; color: #2f2a24;
+    border-radius: 3px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.55);
+    font-family: Consolas, "Microsoft YaHei", monospace;
+    font-size: 12px; line-height: 1.7;
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s ease, transform .22s ease;
+  }
+  #receipt.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; cursor: pointer; }
+  #receipt .r-title { font-size: 17px; font-weight: 700; letter-spacing: .16em; text-align: center; }
+  #receipt .r-sub { font-size: 11px; text-align: center; color: #7d766c; letter-spacing: .08em; }
+  #receipt .r-time { font-size: 11px; text-align: center; color: #9a938a; margin-top: 6px; }
+  #receipt .r-line { border-top: 1px dashed #c9c2b6; margin: 9px 0; }
+  #receipt .r-row { display: flex; justify-content: space-between; }
+  #receipt .r-total { font-weight: 700; font-size: 14px; }
+  #receipt .r-small { font-size: 11px; color: #7d766c; }
+  #receipt .r-thanks { text-align: center; margin-top: 10px; font-size: 12px; letter-spacing: .05em; }
+  #receipt .r-tap { text-align: center; margin-top: 8px; font-size: 10px; color: #b3aca1; letter-spacing: .1em; }
+
+  /* M21：小D的一天（日记） */
+  #diary {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.95);
+    z-index: 41; width: 366px; max-height: 70vh; padding: 17px 20px 11px;
+    background: #fdfaf2; color: #3a332a;
+    border: 1px solid #e4dbc8;
+    border-radius: 7px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.52);
+    font-size: 12.5px; line-height: 1.8;
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s ease, transform .22s ease;
+  }
+  #diary.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; cursor: pointer; }
+  #diary .d-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px dashed #d6cdb9; padding-bottom: 7px; margin-bottom: 8px;
+  }
+  #diary .d-head b { font-size: 15px; letter-spacing: .14em; }
+  #diary .d-date { font-size: 11px; color: #8d8375; }
+  #diary #dList { max-height: 48vh; overflow-y: auto; }
+  #diary .d-row { display: flex; gap: 8px; }
+  #diary .d-t { flex: 0 0 40px; color: #b3a390; font-variant-numeric: tabular-nums; }
+  #diary .d-empty { text-align: center; color: #a89e8e; padding: 14px 0; line-height: 1.7; }
+  #diary .d-foot { text-align: center; margin-top: 8px; font-size: 10px; color: #b3aca1; letter-spacing: .1em; }
+
+  /* M25：便利店二楼的漫画（三格分镜，点一下翻页） */
+  #comic {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.94);
+    z-index: 43; width: 392px; padding: 12px 12px 8px;
+    background: linear-gradient(180deg, #fbf6e9, #f0e7d4);
+    border: 1px solid #dcd0b8; border-radius: 10px;
+    box-shadow: 0 20px 54px rgba(0,0,0,.55);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    cursor: pointer;
+  }
+  #comic.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  #comic .c-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 13px; color: #6b5f4d; letter-spacing: .08em;
+    padding: 0 4px 7px;
+  }
+  #comic .c-head b { font-size: 15px; letter-spacing: .14em; color: #3a332a; }
+  #comic #comicImg { display: block; width: 100%; border-radius: 6px; }
+  #comic .c-foot { text-align: center; margin-top: 7px; font-size: 10.5px; color: #a2988a; letter-spacing: .1em; }
+  #comic #comicClose {
+    position: absolute; right: -10px; top: -12px;
+    width: 26px; height: 26px; line-height: 24px; text-align: center;
+    background: #4a4034; color: #f6efe1; border-radius: 50%;
+    font-size: 15px; cursor: pointer;
+  }
+
+  /* M21：冰箱上那张便签翻开的「今天吃什么」 */
+  #mealpanel {
+    position: fixed; left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.95);
+    z-index: 42; width: 352px; padding: 16px 18px 12px;
+    background: #fffdf5; color: #3a332a;
+    border: 1px solid #e6dcc4;
+    border-radius: 7px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.5);
+    font-size: 12.5px; line-height: 1.7;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  #mealpanel.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; cursor: pointer; }
+  #mealpanel .m-head { font-size: 15px; font-weight: 700; letter-spacing: .12em; text-align: center; margin-bottom: 4px; }
+  #mealpanel .m-sub { font-size: 11px; text-align: center; color: #94897a; margin-bottom: 9px; }
+  #mealpanel .m-row { display: flex; gap: 10px; padding: 6px 8px; border-radius: 6px; align-items: baseline; }
+  #mealpanel .m-row.now { background: #fbf1dc; box-shadow: inset 0 0 0 1px #ecdcbb; }
+  #mealpanel .m-time { flex: 0 0 84px; font-weight: 600; }
+  #mealpanel .m-time i { display: block; font-style: normal; font-size: 10px; color: #a1978a; font-weight: 400; }
+  #mealpanel .m-dish { flex: 1; color: #4a4238; }
+  #mealpanel .m-dish b { color: #b0552f; }
+  #mealpanel .m-foot { text-align: center; margin-top: 8px; font-size: 10px; color: #b3aca1; letter-spacing: .1em; }
+
+  /* 左上角：视角切换（小屋 / 厨房 / 浴室 / 走进去） */
+  #views {
+    position: fixed; left: 18px; top: 96px; z-index: 22;
+    display: flex; flex-direction: column; gap: 7px;
+    max-width: 46vw;
+  }
+  #views .vgrp { display: flex; gap: 7px; flex-wrap: wrap; }
+  #views .vb {
+    padding: 6px 12px; border-radius: 999px;
+    background: rgba(14,20,34,.62);
+    border: 1px solid rgba(120,150,220,.18);
+    backdrop-filter: blur(10px);
+    font-size: 12px; color: #cfd9ea; letter-spacing: .05em;
+    cursor: pointer; user-select: none;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  #views .vb:hover { background: rgba(26,38,62,.85); }
+  #views .vb.on {
+    background: rgba(30,44,72,.88);
+    border-color: rgba(126,166,255,.55);
+    color: #e6efff;
+  }
+  /* M19：小D自己演示的按钮，稍微亮一点，一眼看得见 */
+  #views .vb#demobtn {
+    background: rgba(46,32,68,.72);
+    border-color: rgba(186,146,255,.42);
+    color: #ded0ff;
+  }
+  #views .vb#demobtn:hover { background: rgba(66,46,96,.88); }
+  #views .vb#demobtn.on {
+    background: rgba(88,60,140,.92);
+    border-color: rgba(210,175,255,.85);
+    color: #fbf6ff;
+  }
+  /* M27：「看小D玩」的按钮，青绿色 */
+  #views .vb#autobtn {
+    background: rgba(26,58,56,.74);
+    border-color: rgba(120,220,200,.42);
+    color: #c8f2e6;
+  }
+  #views .vb#autobtn:hover { background: rgba(34,80,74,.9); }
+  #views .vb#autobtn.on {
+    background: rgba(30,110,96,.92);
+    border-color: rgba(150,255,225,.85);
+    color: #f2fffb;
+  }
+
+  /* 鼠标停在能点的东西上时的小名牌 */
+  #hot {
+    position: fixed; left: 0; top: 0; z-index: 24;
+    transform: translate(-50%, -100%) scale(.94);
+    padding: 5px 12px; border-radius: 999px;
+    background: rgba(18,26,44,.88);
+    border: 1px solid rgba(140,175,255,.38);
+    font-size: 12px; color: #dfe9ff; letter-spacing: .05em;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity .14s ease, transform .14s ease;
+  }
+  #hot.show { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+
+  /* 第一人称的准星 */
+  #cross {
+    position: fixed; left: 50%; top: 50%; z-index: 21;
+    width: 8px; height: 8px; margin: -4px 0 0 -4px;
+    border-radius: 50%; background: rgba(255,255,255,.5);
+    box-shadow: 0 0 0 2px rgba(120,160,255,.22);
+    pointer-events: none; display: none;
+    transition: width .12s ease, height .12s ease, margin .12s ease, background .12s ease;
+  }
+  #cross.on { display: block; }
+  #cross.hit {
+    width: 18px; height: 18px; margin: -9px 0 0 -9px;
+    background: rgba(255,228,186,.92);
+    box-shadow: 0 0 0 4px rgba(255,200,120,.20);
+  }
+
+  /* 自动导览的字幕 */
+  #tourcap {
+    position: fixed; left: 50%; top: 19%; transform: translate(-50%, 10px);
+    z-index: 23; max-width: 78vw; text-align: center;
+    font-size: 17px; letter-spacing: .07em; color: #ffe9c9;
+    text-shadow: 0 2px 20px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.55);
+    opacity: 0; transition: opacity .5s ease, transform .5s ease;
+    pointer-events: none;
+  }
+  #tourcap.show { opacity: 1; transform: translate(-50%, 0); }
+  /* M19：小D演示时字幕放到下边，别跟气泡打架 */
+  #tourcap.democap {
+    top: auto; bottom: 158px;
+    font-size: 15.5px; color: #e8eeff; letter-spacing: .06em;
+    background: rgba(14,20,34,.62);
+    padding: 7px 18px; border-radius: 999px;
+    border: 1px solid rgba(140,170,255,.26);
+    backdrop-filter: blur(8px);
+  }
+
+  /* ============================================================
+   * M72：小手机
+   * 把「去哪儿」从左上角那一排按钮里搬进手机屏，
+   * 左上角只剩家里的视角，一眼就清爽了。
+   * ============================================================ */
+
+  /* 收起时：右下角那台小手机（点它或按 O 打开） */
+  #phonetab {
+    position: fixed; right: 24px; bottom: 96px; z-index: 23;
+    width: 54px; height: 92px;
+    border-radius: 16px; cursor: pointer;
+    background: linear-gradient(155deg, #3b4763 0%, #1a2133 44%, #090d15 100%);
+    border: 1px solid rgba(150,185,255,.3);
+    box-shadow:
+      0 12px 26px rgba(0,0,0,.55),
+      0 1px 0 rgba(255,255,255,.16) inset,
+      0 0 20px rgba(96,150,255,.22);
+    transform: rotate(-5deg);
+    transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+    animation: phonetab-float 4.6s ease-in-out infinite;
+  }
+  #phonetab:hover {
+    animation: none;
+    transform: rotate(-2deg) translateY(-4px) scale(1.06);
+    box-shadow: 0 16px 34px rgba(0,0,0,.6), 0 0 0 2px rgba(126,166,255,.5);
+  }
+  #phonetab:active { animation: none; transform: rotate(-2deg) scale(.97); }
+  #phonetab.hide { opacity: 0; pointer-events: none; transform: rotate(-5deg) scale(.9); }
+  #phonetab .notch {
+    position: absolute; left: 50%; top: 5px; width: 15px; height: 3px;
+    margin-left: -7.5px; border-radius: 2px; background: rgba(0,0,0,.55);
+  }
+  #phonetab .mini {
+    position: absolute; inset: 3px; border-radius: 13px; overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    background: radial-gradient(circle at 50% 26%, #2a4270 0%, #101a30 62%, #0a1020 100%);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.5) inset;
+  }
+  #phonetab .mw { font-size: 20px; line-height: 1; animation: bob 2.6s ease-in-out infinite; }
+  #phonetab .mclk {
+    font-size: 9px; color: #bcd2ff; letter-spacing: .04em;
+    font-variant-numeric: tabular-nums;
+  }
+  @keyframes phonetab-float {
+    0%, 100% { transform: rotate(-5deg) translateY(0); }
+    50% { transform: rotate(-5deg) translateY(-5px); }
+  }
+
+  /* 打开后：整块屏幕 */
+  #phone {
+    position: fixed; inset: 0; z-index: 46;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .24s ease, visibility .24s ease;
+  }
+  #phone.open { opacity: 1; visibility: visible; pointer-events: auto; }
+  #phone .bg {
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at 50% 40%, rgba(12,20,38,.26) 0%, rgba(4,6,12,.66) 76%);
+    backdrop-filter: blur(2.5px);
+  }
+  #phone .frame {
+    position: absolute; left: 50%; top: 50%;
+    width: 316px; height: min(600px, 90vh);
+    padding: 9px;
+    border-radius: 44px;
+    background: linear-gradient(158deg, #414d6b 0%, #1b2334 34%, #0b0f18 100%);
+    box-shadow:
+      0 34px 80px rgba(0,0,0,.66),
+      0 1px 0 rgba(255,255,255,.2) inset,
+      0 0 0 1px rgba(160,190,255,.16) inset;
+    transform: translate(-50%, -48%) scale(.9);
+    transition: transform .3s cubic-bezier(.2,1.35,.42,1);
+  }
+  #phone.open .frame { transform: translate(-50%, -50%) scale(1); }
+  #phone .kbtn {
+    position: absolute; left: -2px; width: 3px; border-radius: 2px;
+    background: linear-gradient(#5f6f93, #2b3550);
+  }
+  #phone .kbtn.k1 { top: 108px; height: 26px; }
+  #phone .kbtn.k2 { top: 148px; height: 44px; }
+  #phone .kbtn.k3 { top: 200px; height: 44px; }
+
+  #phone .screen {
+    position: relative; width: 100%; height: 100%;
+    border-radius: 36px; overflow: hidden;
+    display: flex; flex-direction: column;
+    padding: 8px 12px 7px;
+    background: linear-gradient(180deg, #18243e 0%, #0d1424 48%, #0a1020 100%);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.65) inset;
+  }
+
+  /* 屏保：一圈光 + 慢慢往上飘的泡泡 + 一只淡淡的大鲸鱼 */
+  #phone .wp { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  #phone .wp .halo {
+    position: absolute; left: 50%; top: 20%; width: 280px; height: 280px; margin-left: -140px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(96,150,255,.32) 0%, rgba(96,150,255,0) 70%);
+  }
+  #phone .wp .pw {
+    position: absolute; left: 50%; bottom: 5%;
+    transform: translateX(-50%) rotate(-7deg);
+    font-size: 152px; line-height: 1; opacity: .10;
+  }
+  #phone .wp .bub {
+    position: absolute; bottom: -30px; border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.5), rgba(150,200,255,.10) 62%, rgba(150,200,255,0) 72%);
+    border: 1px solid rgba(160,205,255,.2);
+    animation: phbub 11s linear infinite;
+  }
+  #phone .wp .b1 { left: 14%; width: 15px; height: 15px; animation-duration: 10s; animation-delay: .3s; }
+  #phone .wp .b2 { left: 46%; width: 9px; height: 9px; animation-duration: 13s; animation-delay: 2.6s; }
+  #phone .wp .b3 { left: 72%; width: 20px; height: 20px; animation-duration: 15s; animation-delay: 5.1s; }
+  #phone .wp .b4 { left: 88%; width: 7px; height: 7px; animation-duration: 12s; animation-delay: 7.4s; }
+  @keyframes phbub {
+    0% { transform: translateY(0) scale(.7); opacity: 0; }
+    14% { opacity: .85; }
+    86% { opacity: .45; }
+    100% { transform: translateY(-580px) scale(1.15); opacity: 0; }
+  }
+
+  /* 状态栏 */
+  #phone .sb {
+    position: relative; z-index: 2; flex: 0 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+    height: 20px; padding: 0 7px; font-size: 10px;
+    color: #a9bcdc; letter-spacing: .08em;
+  }
+  #phone .sb .sb-r { display: flex; align-items: center; gap: 5px; }
+  #phone .sb .clk { font-weight: 600; color: #dbe7ff; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+  #phone .sb .sig { display: flex; align-items: flex-end; gap: 1.5px; height: 8px; }
+  #phone .sb .sig i { display: block; width: 2.5px; background: #9fd4ff; border-radius: 1px; }
+  #phone .sb .sig i:nth-child(1) { height: 3px; }
+  #phone .sb .sig i:nth-child(2) { height: 5.5px; }
+  #phone .sb .sig i:nth-child(3) { height: 8px; }
+  #phone .sb .bat { font-size: 9.5px; color: #bfd2ee; letter-spacing: 0; }
+
+  /* 小D 名片 */
+  #phone .hero {
+    position: relative; z-index: 2; flex: 0 0 auto;
+    display: flex; align-items: center; gap: 9px;
+    margin-top: 6px; padding: 9px 10px; border-radius: 15px;
+    background: linear-gradient(150deg, rgba(70,108,182,.34), rgba(20,32,54,.6));
+    border: 1px solid rgba(140,180,255,.18);
+    box-shadow: 0 8px 20px rgba(0,0,0,.22) inset;
+  }
+  #phone .hero .av {
+    flex: 0 0 33px; width: 33px; height: 33px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    background: radial-gradient(circle at 34% 28%, #86adff, #2b4685);
+    box-shadow: 0 0 0 2px rgba(150,195,255,.26), 0 3px 10px rgba(0,0,0,.35);
+  }
+  #phone .hi { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  #phone .hi b { font-size: 12px; color: #eaf1ff; letter-spacing: .12em; line-height: 1.2; }
+  #phone .hi .where { font-style: normal; font-size: 10.5px; color: #a8bcdd; letter-spacing: .02em; white-space: nowrap; }
+  #phone .hi .date { font-size: 9px; color: #7f92b4; letter-spacing: .03em; }
+  #phone .tags { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  #phone .tag {
+    font-size: 9px; padding: 2px 6px; border-radius: 7px; white-space: nowrap;
+    background: rgba(10,18,34,.55);
+    border: 1px solid rgba(150,185,255,.16); color: #cfe0ff;
+  }
+
+  /* 小节标题 */
+  #phone .sec {
+    position: relative; z-index: 2; flex: 0 0 auto;
+    display: flex; align-items: baseline; gap: 7px;
+    margin: 10px 2px 5px;
+  }
+  #phone .sec b { font-size: 11px; color: #dfe9ff; letter-spacing: .12em; }
+  #phone .sec span { font-size: 9px; color: #7d90b2; letter-spacing: .02em; }
+  #phone .sec2 { margin-top: 8px; }
+
+  /* 十一个传送格子 */
+  #phone .apps {
+    position: relative; z-index: 2;
+    flex: 0 1 auto; min-height: 0;
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 8px 0; padding: 1px 2px 3px;
+    overflow-y: auto; scrollbar-width: none;
+  }
+  #phone .apps::-webkit-scrollbar { display: none; }
+  /* 每个格子占两列 = 一行三个；最后剩两个的时候（第 10、11 个）挪到中间那两列，
+     不然最后一行会贴在左边，看着少了一块 */
+  #phone .app { grid-column: span 2; }
+  #phone .app:nth-child(10) { grid-column: 2 / span 2; }
+  #phone .app:nth-child(11) { grid-column: 4 / span 2; }
+  #phone .app {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 2px 0; border-radius: 13px; cursor: pointer;
+    transition: background .14s ease, transform .12s ease;
+  }
+  #phone .app:hover { background: rgba(120,160,255,.10); }
+  #phone .app:active { transform: scale(.94); }
+  #phone .app .ic {
+    position: relative; width: 47px; height: 47px; border-radius: 15px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; line-height: 1;
+    box-shadow: 0 6px 14px rgba(0,0,0,.34), 0 1px 0 rgba(255,255,255,.28) inset;
+    transition: box-shadow .16s ease, filter .16s ease;
+  }
+  #phone .app .nm {
+    font-size: 10px; color: #dbe6f8; letter-spacing: .02em; white-space: nowrap;
+    max-width: 92px; overflow: hidden; text-overflow: ellipsis;
+  }
+  #phone .app .sub { font-size: 8.5px; color: #7f94b7; letter-spacing: .02em; white-space: nowrap; }
+  #phone .app.cur .ic {
+    box-shadow: 0 0 0 2.5px #7ee6ff, 0 0 20px rgba(126,230,255,.5), 0 6px 14px rgba(0,0,0,.34);
+  }
+  #phone .app.cur .nm { color: #b9f0ff; }
+  #phone .app.cur .sub { color: #6fd0e6; }
+  /* 打烊的那家：整块压灰，底下的「白天开 / 夜里开」用暖色提醒。
+     这里原本挂了个 🔒 小角标，缩到 10px 根本认不出是个锁，反而像糊了块脏的，去掉。 */
+  #phone .app.lock .ic { filter: grayscale(.72) brightness(.58); }
+  #phone .app.lock .nm { color: #93a2ba; }
+  #phone .app.lock .sub { color: #e0a765; }
+  #phone .app.shake { animation: phshake .34s ease; }
+  @keyframes phshake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-4px); }
+    45% { transform: translateX(4px); }
+    70% { transform: translateX(-2px); }
+  }
+
+  /* 底下四个小开关（转发给右上角那几个真按钮） */
+  #phone .dock {
+    position: relative; z-index: 2; flex: 0 0 auto;
+    display: flex; gap: 5px; margin-top: 7px; padding: 7px 8px;
+    border-radius: 17px;
+    background: rgba(10,18,34,.6);
+    border: 1px solid rgba(140,180,255,.14);
+  }
+  #phone .dk {
+    flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 3px 0; border-radius: 11px; cursor: pointer;
+    transition: background .14s ease, transform .12s ease;
+  }
+  #phone .dk:hover { background: rgba(120,160,255,.12); }
+  #phone .dk:active { transform: scale(.92); }
+  #phone .dk .dk-ic { font-size: 16px; line-height: 1; }
+  #phone .dk .dk-nm { font-size: 8.5px; color: #a8bcdd; white-space: nowrap; }
+  #phone .dk.on .dk-nm { color: #9fe6ff; }
+  #phone .dk.on { background: rgba(60,110,180,.22); }
+  /* 前三个是天气（白天夜晚 / 雨 / 雪），换个暖一点点底色，跟声音/拍照分开 */
+  #phone .dk.wx .dk-nm { color: #d3dff2; }
+  #phone .dk.wx.on { background: rgba(120,96,50,.26); }
+  #phone .dk.wx.on .dk-nm { color: #ffe0b0; }
+  #phone .dksplit {
+    flex: 0 0 1px; align-self: stretch; margin: 5px 3px;
+    background: rgba(150,185,255,.16);
+  }
+  #phone .dk.pop { animation: phpop .26s ease; }
+  @keyframes phpop {
+    0% { transform: scale(.9); }
+    60% { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  /* 底部那一小条 + 关掉 */
+  #phone .homebar {
+    position: relative; z-index: 2; flex: 0 0 auto;
+    width: 92px; height: 4px; border-radius: 3px;
+    margin: 9px auto 1px; background: rgba(190,215,255,.4);
+  }
+  #phone .x {
+    position: absolute; z-index: 3; right: -9px; top: -9px;
+    width: 26px; height: 26px; line-height: 24px; text-align: center;
+    border-radius: 50%; font-size: 16px; color: #d6e2f7;
+    background: rgba(16,24,42,.92);
+    border: 1px solid rgba(150,185,255,.28);
+    box-shadow: 0 6px 16px rgba(0,0,0,.5);
+    cursor: pointer; transition: background .14s ease, color .14s ease;
+  }
+  #phone .x:hover { background: rgba(58,84,132,.96); color: #fff; }
+
+  /* ============================================================
+   * M80：手机版小镇（触屏）
+   * 只在 body.touch 下生效（src/touch.js 加的 class），电脑上一点不变。
+   * ============================================================ */
+  /* 手势层：平时不显示，走起来才铺满屏幕（键盘/鼠标那条路完全不动） */
+  #tpad { position: fixed; inset: 0; z-index: 12; display: none; }
+  body.touch #tpad.on { display: block; }
+  #tpad .tz { position: absolute; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #tpad #tl { left: 0; bottom: 0; width: 44%; height: 64%; }
+  #tpad #tr { left: 44%; right: 0; top: 26%; bottom: 0; }
+  #tstick {
+    position: absolute; left: 0; top: 0; width: 112px; height: 112px;
+    margin: -56px 0 0 -56px; border-radius: 50%;
+    border: 1.5px solid rgba(150,185,255,.36);
+    background: radial-gradient(circle, rgba(24,36,62,.34) 0%, rgba(24,36,62,.10) 68%, rgba(24,36,62,0) 72%);
+    opacity: 0; transition: opacity .16s ease; pointer-events: none;
+  }
+  #tstick.on { opacity: 1; }
+  #tstick .tk {
+    position: absolute; left: 50%; top: 50%; width: 48px; height: 48px;
+    margin: -24px 0 0 -24px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 28%, #e2ecff 0%, #8fb0ff 46%, #4d6bfe 100%);
+    box-shadow: 0 8px 22px rgba(60,110,255,.45), 0 0 0 1px rgba(255,255,255,.28) inset;
+    transition: transform .06s linear;
+  }
+  #tstick .tl2 {
+    position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%);
+    font-size: 10px; color: rgba(200,215,240,.75); letter-spacing: .2em;
+  }
+  #thint {
+    position: fixed; left: 50%; bottom: 34%; transform: translateX(-50%) translateY(6px);
+    z-index: 32; max-width: 88vw; padding: 9px 16px; border-radius: 999px;
+    background: rgba(12,18,32,.78); border: 1px solid rgba(140,170,255,.22);
+    font-size: 12px; color: #dfe9ff; letter-spacing: .02em; white-space: normal;
+    text-align: center; line-height: 1.4;
+    opacity: 0; transition: opacity .3s ease, transform .3s ease; pointer-events: none;
+  }
+  #thint.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #trot {
+    position: fixed; left: 50%; top: 42%; transform: translate(-50%,-50%) scale(.96);
+    z-index: 33; padding: 10px 18px; border-radius: 14px;
+    background: rgba(12,18,32,.86); border: 1px solid rgba(140,170,255,.28);
+    font-size: 13px; color: #eaf1ff; letter-spacing: .03em;
+    opacity: 0; visibility: hidden; transition: opacity .3s ease, transform .3s ease;
+  }
+  #trot.on { opacity: 1; visibility: visible; transform: translate(-50%,-50%) scale(1); }
+
+  body.touch {
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+  }
+  body.touch #app canvas { touch-action: none; }
+  body.touch #hint, body.touch #skins, body.touch #sign { display: none !important; }
+
+  body.touch #hud {
+    left: max(12px, env(safe-area-inset-left));
+    top: max(8px, env(safe-area-inset-top));
+    gap: 2px; max-width: 46vw;
+  }
+  body.touch #brand { font-size: 12.5px; letter-spacing: .06em; text-shadow: 0 1px 8px rgba(0,0,0,.85); }
+  body.touch #mode { font-size: 10.5px; line-height: 1.35; text-shadow: 0 1px 6px rgba(0,0,0,.85); }
+
+  /* 视角条：横着滑，拇指点得到 */
+  body.touch #views {
+    left: 0; right: 0;
+    top: max(48px, calc(env(safe-area-inset-top) + 48px));
+    max-width: none; flex-direction: row; gap: 6px;
+    padding: 2px 12px 6px; overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  body.touch #views::-webkit-scrollbar { display: none; }
+  body.touch #views .vgrp { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; }
+  body.touch #views .vb { padding: 8px 13px; font-size: 12px; }
+
+  /* 声音 / 拍照：右上角两个圆钮 */
+  body.touch #soundbtn, body.touch #photobtn {
+    top: max(8px, env(safe-area-inset-top));
+    width: 42px; height: 42px; padding: 0; gap: 0;
+    border-radius: 50%; justify-content: center; font-size: 0;
+  }
+  body.touch #soundbtn { right: max(10px, env(safe-area-inset-right)); }
+  body.touch #photobtn { right: calc(max(10px, env(safe-area-inset-right)) + 50px); }
+  body.touch #soundbtn span:last-child,
+  body.touch #photobtn span:last-child { display: none; }
+  body.touch #soundbtn span:first-child,
+  body.touch #photobtn span:first-child { font-size: 17px; }
+
+  body.touch #phonetab {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(78px, calc(env(safe-area-inset-bottom) + 78px));
+  }
+  /* 手机上横屏只有 390 高：小手机里面要能滑，不然"去哪儿"只露第一行 */
+  body.touch #phone .screen { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  @media (max-height: 470px) {
+    body.touch #phone .hero { padding: 6px 8px; margin-top: 3px; }
+    body.touch #phone .sec { margin-top: 5px; }
+  }
+  body.touch #tip { bottom: 15%; max-width: 86vw; font-size: 12.5px; padding: 9px 16px; }
+  body.touch #hot { font-size: 11.5px; }
+  body.touch #basket { bottom: 8px; font-size: 11px; }
+  /* 窄屏（竖着拿）：标题那一行别折行，视角条往下让一格 */
+  body.touch #mode { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 600px) {
+    body.touch #views { top: max(58px, calc(env(safe-area-inset-top) + 58px)); }
+    body.touch #hud { max-width: 58vw; }
+  }
+
+  @media (max-width: 430px) {
+    #phone .frame { width: 92vw; }
+  }
+</style>
+<script>
+  /* 兜底：把每一个脚本错误都记下来（包括 main.js 之前就崩掉的），截图自检时能看见 */
+  window.__XD_ERR = [];
+  window.addEventListener('error', function (e) {
+    try {
+      const t = e.target;
+      if (t && t !== window && (t.src || t.href)) {
+        window.__XD_ERR.push('resource ' + String(t.src || t.href).split('/').pop());
+        return;
+      }
+      window.__XD_ERR.push((e.message || 'resource') + ' @' +
+        String(e.filename || '').split('/').pop() + ':' + (e.lineno || '?'));
+    } catch (err) {}
+  }, true);
+</script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="loading">
+    <div class="whale">🐋</div>
+    <div class="ring"></div>
+    <p id="loadingText">小D在开门…</p>
+  </div>
+
+  <div id="hud">
+    <div id="brand">小D的赛博小家</div>
+    <div id="mode">🏠 样板间视角</div>
+  </div>
+
+  <div id="views">
+    <div class="vgrp">
+      <div class="vb on" data-view="house">🏠 小屋</div>
+      <div class="vb" data-view="kitchen">🍳 厨房</div>
+      <div class="vb" data-view="bath">🚿 浴室</div>
+      <div class="vb" data-view="balcony">🌿 阳台</div>
+      <div class="vb" data-view="greenhouse">🪴 花房</div>
+      <div class="vb" data-view="walk">🚶 走进去</div>
+    </div>
+    <div class="vgrp">
+      <div class="vb" id="demobtn" data-view="demo" title="小D自己走一圈演给你看（也可以按 G；D 留给走路往右）">🐋 小D自己来</div>
+      <div class="vb" id="autobtn" data-view="auto" title="看小D自己在屋里忙（也可以按 J）">👀 看小D玩</div>
+    </div>
+  </div>
+
+  <div id="tip"></div>
+
+  <div id="skins">
+    <span>鲸鱼皮肤</span>
+    <button class="sw on" data-skin="classic" style="background:#4d6bfe" title="深寻蓝"></button>
+    <button class="sw" data-skin="night" style="background:#271f19" title="虎鲸黑"></button>
+    <button class="sw" data-skin="pink" style="background:#e85a8a" title="草莓粉"></button>
+    <button class="sw" data-skin="green" style="background:#2e9e6b" title="薄荷绿"></button>
+    <button class="sw" data-skin="gold" style="background:#c78b20" title="土豪金"></button>
+  </div>
+
+  <div id="soundbtn" title="声音开关（也可以按 M 静音）"><span id="soundIcon">🔊</span><span id="soundText">声音</span></div>
+
+  <div id="photobtn" title="拍一张照片（也可以按 P）"><span>📷</span><span>拍照</span></div>
+
+  <!-- M73：天气（白天夜晚 / 雨 / 雪）搬进小手机了。
+       这三个按钮还留在 DOM 里 —— atmosphere.js / rain.js / snow.js 要往里面写状态，
+       小手机的开关也是点它们（转发），试玩脚本也还在点。只是不再显示。 -->
+  <div id="hiddenui" aria-hidden="true">
+    <div id="timebtn" title="切换白天/夜晚（也可以按 T）"><span id="timeIcon">🌙</span><span id="timeText">夜晚</span></div>
+    <div id="rainbtn" title="下雨 / 停雨（也可以按 Y）"><span id="rainIcon">🌦</span><span id="rainText">下雨</span></div>
+    <div id="snowbtn" title="下雪 / 停雪（也可以按 N）"><span id="snowIcon">🌨</span><span id="snowText">下雪</span></div>
+  </div>
+
+  <div id="hot"></div>
+  <div id="cross"></div>
+  <div id="tourcap"></div>
+
+  <div id="hint">
+    <span><b>拖动</b>环视</span>
+    <span><b>点击</b>试试</span>
+    <span><b>O</b>小手机</span>
+    <span><b>F</b>走进去</span>
+    <span><b>P</b>拍照</span>
+    <span><b>H</b>自动导览</span>
+    <span><b>G</b>小D演示</span>
+    <span><b>V</b>妈妈来拜访</span>
+    <span><b>Y</b>下雨</span>
+    <span><b>M</b>静音</span>
+    <span><b>L</b>开关灯</span>
+    <span><b>R</b>回全景</span>
+  </div>
+
+  <div id="sign">M73 · 右下角那台小手机 📱 去哪儿、天气都在里面</div>
+  <div id="photoreset" title="照片墙换回原来的六张">♻️ 换回原来的照片</div>
+  <div id="basket" title="拿的东西和余额（点收银台结账）">
+    <span id="basketLine">🧺 <b id="basketCount">0</b> 件 · <b id="basketTotal">¥0</b></span>
+    <span id="basketMoney">　余额 <b id="wallet">¥100</b></span>
+  </div>
+  <div id="receipt"><div id="receiptInner"></div><div class="r-tap">点一下收起</div></div>
+
+  <div id="diary">
+    <div class="d-head"><b>小D的一天</b><span class="d-date" id="dDate"></span></div>
+    <div id="dList"></div>
+    <div class="d-foot">点一下收起</div>
+  </div>
+
+  <div id="mealpanel">
+    <div class="m-head">今天吃什么</div>
+    <div class="m-sub" id="mSub">按电脑上的真实时间排的</div>
+    <div id="mList"></div>
+    <div class="m-foot">点一下收起</div>
+  </div>
+  <div id="comic">
+    <div class="c-head"><b>便利店夜班日记</b><span id="comicNo">1 / 3</span></div>
+    <img id="comicImg" alt="漫画">
+    <div class="c-foot">点任意处翻页　·　右上角 × 关掉</div>
+    <div id="comicClose">×</div>
+  </div>
+
+  <div id="flash"></div>
+  <div id="fade"><div id="fadeCard"><span class="big"></span><span class="sub dots"></span></div></div>
+
+  <script src="lib/three.min.js"></script>
+  <script src="lib/OrbitControls.js"></script>
+  <script src="lib/GLTFLoader.js"></script>
+  <script src="src/materials.js"></script>
+  <script src="src/room.js"></script>
+  <script src="src/wing.js"></script>
+  <script src="src/lighting.js"></script>
+  <script src="src/lightbudget.js"></script>
+  <script src="src/perfmat.js"></script>
+  <script src="src/atmosphere.js"></script>
+  <script src="src/whale.js"></script>
+  <script src="src/orca_guru.js"></script>
+  <script src="src/orca_swept.js"></script>
+  <script src="src/orca_model.js"></script>
+  <script src="src/furniture.js"></script>
+  <script src="src/workspace.js"></script>
+  <script src="src/living.js"></script>
+  <script src="src/records.js"></script>
+  <script src="src/kitchen.js"></script>
+  <script src="src/bath.js"></script>
+  <script src="src/memories.js"></script>
+  <script src="src/guest.js"></script>
+  <script src="src/rain.js"></script>
+  <script src="src/snow.js"></script>
+  <script src="src/goods.js"></script>
+  <script src="src/store.js"></script>
+  <script src="src/shop.js"></script>
+  <script src="src/sfx.js"></script>
+  <script src="src/photo.js"></script>
+  <script src="src/cooking.js"></script>
+  <script src="src/homefood.js"></script>
+  <script src="src/homeprops.js"></script>
+  <script src="src/life.js"></script>
+  <script src="src/balcony.js"></script>
+  <script src="src/loft.js"></script>
+  <script src="src/roof.js"></script>
+  <script src="src/attic.js"></script>
+  <script src="src/greenhouse.js"></script>
+  <script src="src/customers.js"></script>
+  <script src="src/momstore.js"></script>
+  <script src="src/park.js"></script>
+  <script src="src/parkpeople.js"></script>
+  <script src="src/street.js"></script>
+  <script src="src/festival.js"></script>
+  <script src="src/cafe.js"></script>
+  <script src="src/momcafe.js"></script>
+  <script src="src/jobs.js"></script>
+  <script src="src/relax2d.js"></script>
+  <script src="src/relax.js"></script>
+  <script src="src/earscene.js"></script>
+  <script src="src/earspa.js"></script>
+<script src="src/bakery.js"></script>
+<script src="src/post.js"></script>
+<script src="src/flower.js"></script>
+<script src="src/fishing.js"></script>
+  <script src="src/demo.js"></script>
+  <script src="src/interact.js"></script>
+  <script src="src/phone.js"></script>
+  <script src="src/touch.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
