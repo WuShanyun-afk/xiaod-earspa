@@ -2187,6 +2187,8 @@
       renderer.toneMappingExposure = atmos.getMode() === 'day' ? 0.9 : 1.02;
       school.update(dt, camera.position, state.mode === 'walk');
     }
+    // M82.2：家里书桌上那本《上学日记》（周三上过课才摆出来，每帧问一声，很轻）
+    if (school && school.homeTick) school.homeTick(state.venue);
 
     const tP1 = perfOn ? performance.now() : 0;
     // M65：灯光预算 —— 只让镜头附近的几盏点光源真进 shader
@@ -2253,13 +2255,23 @@
       elLoading.classList.add('hide');
       setTimeout(function () { if (elLoading.parentNode) elLoading.parentNode.removeChild(elLoading); }, 700);
       updateHud();
-      tip(state.venue === 'home'
-        ? '欢迎来小D家 🐋　点「🍳 厨房」看我在做饭，点灶台我就开火'
-        : (state.venue === 'earspa'
-          ? '进鲸耳堂啦 💆 点中间那张竹躺椅，躺下让棉师傅给我采耳'
-          : (state.venue === 'fishing'
-            ? '到鲸鱼码头啦 🎣 点水面抛竿，浮标猛沉冒「!」时再点一下收杆'
-            : '下楼啦 🌆 这就是鲸鱼街，往南走是水上乐园')), 4800);
+      /* M82.2：这段原来是三层嵌套三元，最后那个 else 永远说"这就是鲸鱼街" ——
+       * 直接开 ?venue=school / park / cafe 进来时，第一句话是错的。改成查表。 */
+      const WELCOME_AT = {
+        home: '欢迎来小D家 🐋　点「🍳 厨房」看我在做饭，点灶台我就开火',
+        street: '下楼啦 🌆 这就是鲸鱼街，往南走是水上乐园',
+        store: '楼下就是便利店 🏪 推门进去看看',
+        park: '到水上乐园啦 🎡 点水面我潜过去，点跳板 / 地喷 / 滑道陪你玩',
+        cafe: '进咖啡馆啦 ☕ 点吧台点单（真扣零花钱）',
+        earspa: '进鲸耳堂啦 💆 点中间那张竹躺椅，躺下让棉师傅给我采耳',
+        bakery: '进鲸麦坊啦 🥐 玻璃柜里点一个买，案板上的面团能揉',
+        post: '进鲸邮局啦 📮 先买张邮票（¥2）→ 拿明信片 → 盖邮戳 → 投邮筒',
+        flower: '进鲸花屿啦 🌷 右墙四桶花点一下剪一枝 → 花艺台「包起来」',
+        fishing: '到鲸鱼码头啦 🎣 点水面抛竿，浮标猛沉冒「!」时再点一下收杆',
+        relax: '进鲸捏捏啦 🫧 点桌上的小D 她就开播',
+        school: '到鲸幼园啦 🎒 院子里滑梯 / 秋千 / 沙坑 / 跳格子，教室里能画画、搭积木、睡午觉'
+      };
+      tip(WELCOME_AT[state.venue] || '欢迎来小D家 🐋', 4800);
     }
   }
 

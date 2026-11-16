@@ -40,13 +40,37 @@ XD.School = (function () {
   ];
   const SAVE_KEY = 'xd_school_v1';
 
+  /* M82.1：小动物同学（Kenney Cube Pets，CC0，见 assets/models/pets/CREDITS.md）
+   * 妈妈：「小D的鲸鱼建模总共有3个，建模重复，且无动态效果」→
+   *   以前三只都是同一个 orca 克隆，现在是熊猫 / 兔子 / 小鸡，各带 GLB 自带动画。 */
+  const PET_FILES = ['panda', 'bunny', 'chick'];
+  const PET_INFO = {
+    panda: { name: '团团', size: 0.8 },
+    bunny: { name: '跳跳', size: 0.86 },
+    chick: { name: '啾啾', size: 0.74 }
+  };
+  const PETS = {};                 // 名字 → { scene, clips }
+  let petsAsked = 0, petsLoaded = 0;
+
+  /* 三只小动物各自守着的角落（世界坐标）—— 别藏在犄角里，进门就看得见两只 */
+  const KID_SPOTS = [
+    { pet: 'panda', x: 225.2, z: 3.2, ry: -2.3, act: 'sand' },   // 跷跷板旁边
+    { pet: 'bunny', x: 233.2, z: 4.6, ry: -0.7, act: 'slide' },  // 滑梯下面
+    { pet: 'chick', x: 231.4, z: 2.6, ry: 2.2, act: 'swing' }    // 秋千边上
+  ];
+
   /* ================= 状态 ================= */
   let root = null, scene = null, interact = null, sfx = null, tip = null;
   let isSchoolNow = function () { return false; };
   let getMode = function () { return 'day'; };
-  let onDoor = function () {};
+  let onDoor = function () { };
   let frames = null;
   let t = 0, cool = 0;
+
+  let FORCE_WED = false;     // ?wed=1 把"今天"当周三（截图 / 试玩用）
+  let visitedToday = false;  // 今天进过园子（写日记要用）
+  let studiedToday = false;  // 今天在园里真的玩过（写过日记没有）
+  let diaryOpen = 0;         // 日记翻到第几页（0 = 没翻过）
 
   const flowers = {};        // 已得的小红花（'slide' → 1）
   const paints = [0, 0, 0, 0, 0, 0];   // 墙上 6 个画框：存画的种子（0 = 还空着）
@@ -55,6 +79,28 @@ XD.School = (function () {
   let diploma = false;       // 小奖状拿到没有
   let dug = false;           // 沙坑里的小贝壳挖出来没有
   let act = { name: '', t: 0, dur: 0 };   // 正在演的小动作（小D自己跑一遍）
+  let swingKick = 0, seesawKick = 0;      // 秋千 / 跷跷板被"点着玩"的时候荡得更欢
+  let sandPile = 0;                       // 沙坑里那个城堡堆到第几层
+
+  /* ================= 时间条件（分开写，每处自己判断自己那一份） =================
+   * 妈妈：「晚上应该不在幼儿园，所以要修改触发条件」「你只有周三会上课」
+   *
+   *   isDayTime()      天亮了没有   —— 决定园子开不开门、老师在不在
+   *   isWednesday()    今天是不是周三 —— 决定小动物同学来不来、有没有上学日记
+   *   teacherHere()    老师在不在   —— 白天在（值班），晚上回家
+   *   kidsHere()       同学在不在   —— 只有周三白天才来（上课日）
+   *   flowerToday()    今天能不能拿小红花 —— 开园就有（周三还会多一句"今天有课"）
+   */
+  function isDayTime() { return getMode() === 'day'; }
+  function isWednesday() {
+    if (FORCE_WED) return true;
+    try { return new Date().getDay() === 3; } catch (e) { return false; }
+  }
+  function teacherHere() { return isDayTime(); }
+  function kidsHere() { return isDayTime() && isWednesday(); }
+  function flowerToday() { return isDayTime(); }
+  function diaryReady() { return isWednesday() && studiedToday; }
+
 
   /* ================= 材质小工具 ================= */
   const TEX = {};
@@ -798,6 +844,59 @@ XD.School = (function () {
     });
   }
 
+  /* ================= 家里的《上学日记》（M82.2） =================
+   * 妈妈：「家里玩法丰富会出现小D上学日记。你只有周三会上课」
+   * → 只有周三真的上过课（拿了小红花 / 玩了东西），回家书桌上才会摆出这本日记；
+   *   点一下翻一页，翻完一圈又回到第一页。
+   * 这本日记挂在 scene 上（不是幼儿园的 root），因为要在"家里"露出来。 */
+  let diaryPage = 0;
+  const DIARY_SPOT = { x: -3.26, y: 0.752, z: -2.88 };   // 书桌左前角（桌面 y≈0.745）
+
+  function buildDiary() {
+    const g = new THREE.Group();
+    g.position.set(DIARY_SPOT.x, DIARY_SPOT.y, DIARY_SPOT.z);
+    g.rotation.y = 0.3;
+    g.visible = false;
+    scene.add(g);
+    frames.diary = g;
+    // 封面（深青）+ 内页（米白）+ 书脊 + 小书签
+    box(0.26, 0.035, 0.34, std('#2f5a63', 0.85), 0, 0.018, 0, g);
+    box(0.24, 0.028, 0.32, std('#f7efd9', 0.95), 0, 0.006, 0, g);
+    box(0.03, 0.04, 0.34, std('#24464d', 0.9), -0.115, 0.02, 0, g);
+    box(0.05, 0.004, 0.2, std('#e46a72', 0.9), 0.06, 0.042, 0.02, g);   // 红书签
+    // 封面上的小鲸鱼贴纸
+    ball(0.045, std('#f2d06a', 0.6), 0.02, 0.05, 0.02, g, 1, 0.7, 1);
+    // 一支笔
+    const pen = box(0.018, 0.018, 0.26, std('#4fa8d8', 0.7), 0.2, 0.012, 0.06, g);
+    pen.rotation.y = 0.4;
+  }
+
+  function diaryPages() {
+    const d = new Date();
+    const wd = FORCE_WED ? '周三' : ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
+    const n = nFlowers();
+    const pages = [];
+    pages.push('《小D的上学日记》　' + (d.getMonth() + 1) + '月' + d.getDate() + '日 · ' + wd);
+    pages.push('今天有课！我背着小书包去鲸幼园，泡泡老师在门口等我。');
+    pages.push(n >= ACTS.length
+      ? '五件事全做完了 —— 滑梯、秋千、沙坑、跳格子、画画，五朵小红花都拿到啦 🌺'
+      : '今天拿到了 ' + n + ' 朵小红花 🌺　（滑梯 / 秋千 / 沙坑 / 跳格子 / 画画）');
+    if (nPaints() > 0) pages.push('画了 ' + nPaints() + ' 张画，都挂在教室墙上了，是我自己画的。');
+    if (dug) pages.push('沙坑里挖到一枚小贝壳 🐚，还堆了一个沙子城堡 🏰');
+    if (diploma) pages.push('泡泡老师发了小奖状，贴在墙上，回家要讲给妈妈听 🏅');
+    pages.push('团团、跳跳、啾啾是我的同学，今天一起玩了。明天也想去。');
+    return pages;
+  }
+
+  function homeTick(venue) {
+    if (!frames || !frames.diary) return;
+    const show = (venue === 'home') && diaryReady();
+    if (frames.diary.visible !== show) {
+      frames.diary.visible = show;
+      if (show) diaryPage = 0;
+    }
+  }
+
   /* ================= 院子 ================= */
   function buildYard() {
     /* --- 沙坑（西） --- */
@@ -826,6 +925,25 @@ XD.School = (function () {
     shell.visible = false;
     root.add(shell);
     frames.shell = shell;
+
+    /* --- 沙坑里堆起来的城堡（一层一层加，挖一次长一层） --- */
+    frames.castle = [];
+    for (let i = 0; i < 3; i++) {
+      const cg = new THREE.Group();
+      cg.position.set(222.55, 0.05 + i * 0.2, 1.05);
+      cg.visible = false;
+      root.add(cg);
+      const w = 0.54 - i * 0.12;
+      box(w, 0.19, w, std(i % 2 ? '#d3b074' : '#c9a464', 1), 0, 0.095, 0, cg);
+      // 湿沙的边（跟干沙区分开，不然整个看不见）
+      box(w + 0.04, 0.04, w + 0.04, std('#b8935a', 1), 0, 0.02, 0, cg);
+      // 塔尖小旗
+      if (i === 2) {
+        cyl(0.012, 0.012, 0.26, 5, std('#a9743f'), 0, 0.32, 0, cg);
+        box(0.14, 0.1, 0.01, std('#e46a72', 0.9), 0.07, 0.4, 0, cg);
+      }
+      frames.castle.push(cg);
+    }
 
     /* --- 跷跷板（中偏西） --- */
     const ss = new THREE.Group();
@@ -1089,32 +1207,14 @@ XD.School = (function () {
     bk.rotation.z = -0.18;
     box(0.22, 0.28, 0.02, std('#fffdf2', 0.95), 0.34, 0.6, 0.36, g).rotation.z = -0.18;
 
-    // 小朋友：沙坑边上蹲一只（小小鲸），滑梯平台上站一只
+    /* --- 小动物同学（三个不一样的模型，M82.1） --- */
+    frames.kidsGroup = new THREE.Group();
+    root.add(frames.kidsGroup);
     frames.kids = [];
+    loadPets();
+
+    /* --- 小D 自己（点滑梯 / 秋千 / 跷跷板 / 沙坑 / 跳格子 / 三轮车时跑出来演一下） --- */
     if (XD.Workspace && XD.Workspace.miniOrca) {
-      const k1 = XD.Workspace.miniOrca(0.62);
-      if (k1) {
-        k1.position.set(223.6, 0.32, 0.62);
-        k1.rotation.y = 2.6;
-        root.add(k1);
-        frames.kids.push({ g: k1, ph: 0, base: 0.32, kind: 'sand' });
-      }
-      const k2 = XD.Workspace.miniOrca(0.6);
-      if (k2) {
-        k2.position.set(235.35, 1.72, 2.5);
-        k2.rotation.y = -0.6;
-        root.add(k2);
-        frames.kids.push({ g: k2, ph: 1.7, base: 1.72, kind: 'slide' });
-      }
-      // 教室里趴在绘本角地毯上听故事的一只
-      const k3 = XD.Workspace.miniOrca(0.52);
-      if (k3) {
-        k3.position.set(223.6, 0.31, -6.3);
-        k3.rotation.y = 1.15;
-        root.add(k3);
-        frames.kids.push({ g: k3, ph: 3.1, base: 0.31, kind: 'desk' });
-      }
-      // 小D 自己（点滑梯 / 跳格子 / 三轮车的时候跑出来演一下）
       const me = XD.Workspace.miniOrca(0.66);
       if (me) {
         me.visible = false;
@@ -1124,6 +1224,178 @@ XD.School = (function () {
       }
     }
   }
+
+  /* ================= 小动物：加载 + 站位 + 自己的小日子 ================= */
+  function loadPets() {
+    if (!THREE.GLTFLoader) return;
+    const loader = new THREE.GLTFLoader();
+    PET_FILES.forEach(function (n) {
+      petsAsked++;
+      loader.load('assets/models/pets/animal-' + n + '.glb', function (g) {
+        PETS[n] = { scene: g.scene, clips: g.animations || [] };
+        petsLoaded++;
+        if (petsLoaded >= petsAsked) buildKids();
+      }, undefined, function (e) {
+        petsLoaded++;
+        if (window.console) console.warn('[鲸幼园] 小动物没加载出来：', n, e && e.message);
+        if (petsLoaded >= petsAsked) buildKids();
+      });
+    });
+  }
+
+  function buildKids() {
+    if (!frames || frames.kidsBuilt) return;
+    frames.kidsBuilt = true;
+    KID_SPOTS.forEach(function (spot, i) {
+      const src = PETS[spot.pet];
+      if (!src) return;
+      const info = PET_INFO[spot.pet] || { name: spot.pet, size: 0.8 };
+      const g = src.scene.clone(true);
+      // 按包围盒缩到目标身高、底面坐地
+      const bb = new THREE.Box3().setFromObject(g);
+      const sz = new THREE.Vector3();
+      bb.getSize(sz);
+      const s = info.size / Math.max(0.001, sz.y);
+      g.scale.setScalar(s);
+      g.traverse(function (o) {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
+      });
+      const wrap = new THREE.Group();
+      wrap.add(g);
+      wrap.position.set(spot.x, 0, spot.z);
+      wrap.rotation.y = spot.ry;
+      frames.kidsGroup.add(wrap);
+
+      const kid = {
+        name: info.name, pet: spot.pet,
+        g: wrap, model: g,
+        home: { x: spot.x, z: spot.z, ry: spot.ry },
+        spot: spot,
+        mixer: null, actions: {}, cur: '',
+        t: 0.3 + i * 0.7, wait: 1.2 + i * 0.9,
+        mode: 'idle', tx: spot.x, tz: spot.z,
+        phase: i * 1.7
+      };
+      if (src.clips && src.clips.length) {
+        kid.mixer = new THREE.AnimationMixer(g);
+        src.clips.forEach(function (c) {
+          kid.actions[c.name] = kid.mixer.clipAction(c);
+        });
+        playKid(kid, 'idle');
+      }
+      frames.kids.push(kid);
+    });
+    // 老朋友（上午没加载出来就先空着，这一帧补上）
+    applyPeopleTime();
+  }
+
+  function playKid(kid, name) {
+    if (!kid || !kid.actions || !kid.actions[name]) return;
+    if (kid.cur === name) return;
+    const prev = kid.actions[kid.cur];
+    if (prev && prev !== kid.actions[name]) {
+      try { prev.fadeOut(0.18); } catch (e) { }
+    }
+    const a = kid.actions[name];
+    try {
+      a.reset();
+      a.fadeIn(0.2);
+      a.play();
+      if (name === 'dance' || name === 'gesture-positive' || name === 'eat') {
+        a.setLoop(THREE.LoopOnce, 1);
+        a.clampWhenFinished = true;
+      } else {
+        a.setLoop(THREE.LoopRepeat, Infinity);
+      }
+    } catch (e) { }
+    kid.cur = name;
+  }
+
+  /* 每只小动物自己的小日子：发呆 → 走两步 → 玩一下 → 发呆 */
+  function tickKid(kid, dt) {
+    kid.t += dt;
+    if (kid.mixer) kid.mixer.update(dt);
+    // 演一次性动作（dance / eat）的时候就别打断
+    if (kid.cur === 'dance' || kid.cur === 'eat' || kid.cur === 'gesture-positive') {
+      kid.wait -= dt;
+      if (kid.wait > 0) return;
+      playKid(kid, 'idle');
+      kid.mode = 'idle';
+      kid.wait = 1.2 + Math.random() * 1.6;
+      return;
+    }
+    kid.wait -= dt;
+    if (kid.mode === 'walk') {
+      const dx = kid.tx - kid.g.position.x, dz = kid.tz - kid.g.position.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < 0.08 || kid.wait < -0.4) {
+        kid.mode = 'idle';
+        kid.g.position.set(kid.tx, 0, kid.tz);
+        playKid(kid, 'idle');
+        kid.wait = 1.4 + Math.random() * 2.0;
+      } else {
+        const sp = Math.min(d, 0.55 * dt + 0.02);
+        kid.g.position.x += dx / d * sp;
+        kid.g.position.z += dz / d * sp;
+        kid.g.rotation.y = Math.atan2(dx, dz);
+        playKid(kid, 'walk');
+      }
+      return;
+    }
+    if (kid.wait > 0) return;
+    // 挑下一件事：多数时候在原地发呆，偶尔走到附近另一个角落
+    const r = Math.random();
+    if (r < 0.45) {
+      playKid(kid, 'dance');
+      kid.wait = 1.6;
+    } else if (r < 0.62) {
+      playKid(kid, 'eat');
+      kid.wait = 1.6;
+    } else {
+      kid.tx = kid.home.x + (Math.random() - 0.5) * 1.2;
+      kid.tz = kid.home.z + (Math.random() - 0.5) * 1.2;
+      kid.mode = 'walk';
+      kid.wait = 2.2;
+    }
+  }
+
+  /* 谁在这儿玩（点滑梯/秋千的时候让最近的那只一起） */
+  function nearestKid(x, z) {
+    let best = null, bd = 1e9;
+    for (let i = 0; i < frames.kids.length; i++) {
+      const k = frames.kids[i];
+      const dx = k.g.position.x - x, dz = k.g.position.z - z;
+      const d = dx * dx + dz * dz;
+      if (d < bd) { bd = d; best = k; }
+    }
+    return bd < 36 ? best : null;
+  }
+
+  function kidCheer(x, z) {
+    const k = nearestKid(x, z);
+    if (!k) return;
+    playKid(k, 'dance');
+    k.wait = 2.0;
+  }
+
+  /* 人什么时候在：老师白天在 / 同学只有周三白天来（晚上一个人都没有） */
+  function applyPeopleTime() {
+    if (!frames) return;
+    const teacherOk = teacherHere();
+    if (frames.teacher) frames.teacher.visible = teacherOk;
+    const kidsOk = kidsHere();
+    if (frames.kidsGroup) frames.kidsGroup.visible = kidsOk;
+    if (frames.kids) {
+      for (let i = 0; i < frames.kids.length; i++) {
+        const k = frames.kids[i];
+        if (!kidsOk && k.mode === 'walk') { k.mode = 'idle'; k.g.position.set(k.home.x, 0, k.home.z); }
+      }
+    }
+  }
+
 
   /* ================= 光 ================= */
   function buildLights() {
@@ -1164,7 +1436,8 @@ XD.School = (function () {
   function save() {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
-        f: Object.keys(flowers), p: paints.slice(), c: diploma ? 1 : 0, g: dug ? 1 : 0
+        f: Object.keys(flowers), p: paints.slice(), c: diploma ? 1 : 0,
+        g: dug ? 1 : 0, k: sandPile
       }));
     } catch (e) { /* 隐私模式下存不了也无所谓 */ }
   }
@@ -1177,9 +1450,16 @@ XD.School = (function () {
     for (let i = 0; i < paints.length; i++) paints[i] = (p[i] | 0) || 0;
     diploma = !!s.c;
     dug = !!s.g;
+    sandPile = Math.max(0, Math.min(3, s.k | 0));
     // 下次从"第一个空框"开始挂
     paintNext = 0;
     for (let i = 0; i < paints.length; i++) if (!paints[i]) { paintNext = i; break; }
+  }
+
+  /* 沙坑城堡堆到第 n 层（挖过才有第一层） */
+  function buildCastle(n) {
+    if (!frames || !frames.castle) return;
+    for (let i = 0; i < frames.castle.length; i++) frames.castle[i].visible = i < n;
   }
   function nPaints() {
     let n = 0;
@@ -1206,8 +1486,9 @@ XD.School = (function () {
       if (!on) p.pop = 0;
     }
     if (frames.cert) frames.cert.visible = !!diploma;
-    // 沙坑里的小贝壳
+    // 沙坑里的小贝壳 + 堆起来的城堡
     if (frames.shell) frames.shell.visible = !!dug;
+    buildCastle(dug ? 1 + sandPile : 0);
     // 墙上的画
     refreshDrawings();
     if (pop && frames.cert && diploma) frames.cert.scale.setScalar(1.18);
@@ -1238,6 +1519,7 @@ XD.School = (function () {
   /* ================= 小红花 ================= */
   function award(k, line) {
     if (flowers[k]) return false;
+    if (isWednesday()) studiedToday = true;
     flowers[k] = 1;
     save();
     refreshBoard(true);
@@ -1257,6 +1539,7 @@ XD.School = (function () {
   /* ================= 小动作 ================= */
   function startAct(name, dur) {
     if (!frames.me) return;
+    if (isWednesday()) studiedToday = true;
     act.name = name;
     act.t = 0;
     act.dur = dur;
@@ -1270,12 +1553,24 @@ XD.School = (function () {
     const p = Math.min(1, act.t / act.dur);
     // miniOrca 返回的 group 自己带了一个归一化缩放，这里只能乘不能覆盖（覆盖过一次 → 小D 变得比滑梯还高）
     const bs = me.userData.base || me.scale.x || 1;
+    /* 滑道的真实表面：本地坐标系里板子从 (z 0.42,y 1.36) 斜到 (z -1.35,y 0.30)
+     * 把它写成 y(z) 之后，小D 只贴着这条线滑 —— M82 那版是手写两个端点，整个人陷进板子里。 */
+    const S_TOP = { z: 3.18, y: 1.40 };     // 屋顶那头的板口
+    const S_BOT = { z: 1.62, y: 0.31 };     // 落地那头的板口
+    const slideY = function (z) {
+      const k = (z - S_BOT.z) / (S_TOP.z - S_BOT.z);
+      return S_BOT.y + k * (S_TOP.y - S_BOT.y);
+    };
     if (act.name === 'slide') {
-      // 滑梯上滑下来：从平台 (235.25, 1.72, 3.32) 滑到 (234.9, 0.33, 1.9)
-      const e = Math.pow(p, 0.7);
-      me.position.set(235.25 - e * 0.35, 1.72 - e * 1.39, 3.32 - e * 1.42);
+      // 先站在平台上（0~0.18），再顺着滑道下去
+      const q = p < 0.18 ? 0 : (p - 0.18) / 0.82;
+      const e = 1 - Math.pow(1 - q, 2.1);            // 越滑越快
+      const z = S_TOP.z - (S_TOP.z - S_BOT.z) * e;
+      const y = slideY(z) + 0.04;                    // 坐在板上，不是穿过去
+      me.position.set(234.9, y, z);
       me.rotation.y = Math.PI;
-      me.scale.setScalar(bs * (1 + Math.sin(p * Math.PI) * 0.06));
+      me.rotation.x = q > 0 ? -0.42 : 0;             // 往下滑的时候前倾
+      me.scale.setScalar(bs * (1 + Math.sin(Math.min(1, q) * Math.PI) * 0.05));
     } else if (act.name === 'hop') {
       // 跳格子：从下往上跳过 8 格，一格一跳
       const n = 8;
@@ -1285,21 +1580,61 @@ XD.School = (function () {
       const y = 0.33 + Math.sin(local * Math.PI) * 0.24;
       me.position.set(228.1 + zig[i], y, 3.6 - i * 0.5);
       me.rotation.y = Math.PI;
+      me.rotation.x = -0.18 * Math.sin(local * Math.PI);
       me.scale.setScalar(bs);
     } else if (act.name === 'trike') {
       // 骑小三轮车：绕一个半径 1.5 的圈
       const a = p * Math.PI * 2 * 1.6;
       me.position.set(232.0 + Math.cos(a) * 1.5, 0.33, 6.6 + Math.sin(a) * 1.5);
       me.rotation.y = -a + Math.PI / 2;
+      me.rotation.x = 0;
       me.scale.setScalar(bs);
       if (frames.trike) {
         frames.trike.position.set(me.position.x, 0, me.position.z);
         frames.trike.rotation.y = -a + Math.PI / 2;
       }
+    } else if (act.name === 'sand') {
+      // 沙坑：蹲下来挖（一铲一铲），挖完站起来
+      const dig = Math.sin(act.t * 9);
+      me.position.set(222.55, 0.18 + Math.max(0, dig) * 0.06, 2.55);
+      me.rotation.y = -1.9;
+      me.rotation.x = 0.28 + Math.max(0, dig) * 0.12;
+      me.scale.setScalar(bs * 0.92);
+      // 让最近的那只动物也蹲下来一起挖
+      const k = nearestKid(223.4, 2.6);
+      if (k && p > 0.15 && p < 0.9) playKid(k, 'eat');
+    } else if (act.name === 'swing') {
+      // 秋千：坐在左边的座位上，跟着座位一起荡
+      const pivot = frames.swingSeats && frames.swingSeats[0];
+      if (pivot) {
+        const th = pivot.rotation.x;
+        const px = 232.2 - 0.55, py = 2.36, pz = 1.2;
+        me.position.set(px, py - 1.5 * Math.cos(th) + 0.2, pz - 1.5 * Math.sin(th));
+        me.rotation.y = Math.PI;
+        me.rotation.x = th * 0.55;
+        me.scale.setScalar(bs);
+      }
+    } else if (act.name === 'seesaw') {
+      // 跷跷板：坐在东头，跟着板子上下
+      const phi = frames.seesaw ? frames.seesaw.rotation.z : 0;
+      const bx = 226.2, by = 0.36, bz = 2.0;
+      const lx = 0.95, ly = 0.06;
+      me.position.set(bx + lx * Math.cos(phi) - ly * Math.sin(phi), by + lx * Math.sin(phi) + ly * Math.cos(phi) + 0.3, bz);
+      me.rotation.y = -Math.PI / 2;
+      me.rotation.x = 0;
+      me.scale.setScalar(bs);
+      const k = nearestKid(226.2, 2.0);
+      if (k && p > 0.1 && p < 0.95) {
+        k.g.position.set(bx - 0.95 * Math.cos(phi), 0.06 + 0.95 * Math.abs(Math.sin(phi)), bz);
+        playKid(k, 'idle');
+      }
     }
     if (p >= 1) {
       act.name = '';
-      if (me) me.visible = false;
+      if (me) {
+        me.visible = false;
+        me.rotation.x = 0;
+      }
       if (frames.trike) { frames.trike.position.set(232.0, 0, 6.6); frames.trike.rotation.y = 0; }
     }
   }
@@ -1319,14 +1654,18 @@ XD.School = (function () {
       if (L.room) for (let i = 0; i < L.room.length; i++) L.room[i].intensity = 0.4 * rk;
       L.porch.intensity = day ? 0.18 : 0.6;
     }
-    // 秋千
+    // 秋千（有人玩的时候荡得更高更快）
     if (frames.swingSeats) {
+      const amp = 0.42 + swingKick * 0.55;
+      const spd = 1.45 + swingKick * 1.1;
       for (let i = 0; i < frames.swingSeats.length; i++) {
-        frames.swingSeats[i].rotation.x = Math.sin(t * 1.45 + i * 0.9) * 0.42;
+        frames.swingSeats[i].rotation.x = Math.sin(t * spd + i * 0.9) * amp;
       }
     }
-    // 跷跷板：轻轻晃
-    if (frames.seesaw) frames.seesaw.rotation.z = Math.sin(t * 0.7) * 0.09;
+    // 跷跷板：平时轻轻晃，有人玩的时候一上一下
+    if (frames.seesaw) {
+      frames.seesaw.rotation.z = Math.sin(t * (0.7 + seesawKick * 1.6)) * (0.09 + seesawKick * 0.34);
+    }
     // 风车 / 招牌风车
     if (frames.windmill) frames.windmill.rotation.z += dt * 1.15;
     if (frames.windmills) {
@@ -1341,20 +1680,25 @@ XD.School = (function () {
         frames.lamps[i].rotation.x = Math.cos(t * 0.7 + i) * 0.018;
       }
     }
-    // 小朋友
-    if (frames.kids) {
+    // 小动物同学：自己的小日子（只有周三白天才出来）
+    if (frames.kidsGroup && frames.kidsGroup.visible) {
       for (let i = 0; i < frames.kids.length; i++) {
         const k = frames.kids[i];
-        if (k.kind === 'sand') {
-          k.g.position.y = k.base + Math.sin(t * 2.1 + k.ph) * 0.03;
-          k.g.rotation.z = Math.sin(t * 2.1 + k.ph) * 0.06;
-        } else if (k.kind === 'slide') {
-          k.g.position.y = k.base + Math.sin(t * 0.9 + k.ph) * 0.06;
-          k.g.rotation.y = -0.6 + Math.sin(t * 0.5) * 0.25;
-        } else {
-          k.g.rotation.z = Math.sin(t * 1.1 + k.ph) * 0.04;
-        }
+        k.g.position.y = 0;
+        tickKid(k, dt);
+        // 走路时轻轻颠一下（GLB 自己也有 walk 动画，这里给一点点额外的弹性）
+        if (k.mode === 'walk') k.g.position.y = Math.abs(Math.sin(t * 7 + k.phase)) * 0.05;
       }
+    }
+    // 老师白天在、晚上回家；同学周三白天在
+    if (frames.teacher && frames.teacher.visible !== teacherHere()) frames.teacher.visible = teacherHere();
+    if (frames.kidsGroup && frames.kidsGroup.visible !== kidsHere()) applyPeopleTime();
+
+    // 秋千 / 跷跷板的"有人玩"状态：被点时荡得更欢
+    swingKick = Math.max(0, swingKick - dt * 0.55);
+    seesawKick = Math.max(0, seesawKick - dt * 0.5);
+    if (frames.teacher) {
+      frames.teacher.position.y = Math.sin(t * 1.1) * 0.012;
     }
     // 小红花弹一下
     if (frames.petals) {
@@ -1384,9 +1728,14 @@ XD.School = (function () {
   /* ================= 可点的地方 ================= */
   function register() {
     if (!interact) return;
-    const when = function () { return !!isSchoolNow(); };
-    function add(o) {
-      o.when = when;
+    /* 每个热区自己的条件分开写（妈妈：「注意各个部分的触发条件」）：
+     *   add(o)            只要在幼儿园里就能点（设施本身）
+     *   add(o, fn)        再加一层自己的条件（老师白天在 / 同学周三在 / 日记本） */
+    function add(o, extraWhen) {
+      const base = function () { return !!isSchoolNow(); };
+      o.when = extraWhen
+        ? function () { return base() && !!extraWhen(); }
+        : base;
       return interact.add(o);
     }
 
@@ -1416,7 +1765,11 @@ XD.School = (function () {
       anchor: [232.2, 2.75, 1.2],
       onClick: function () {
         if (sfx && sfx.chime) sfx.chime();
+        swingKick = 1;
+        startAct('swing', 4.2);
+        kidCheer(232.2, 1.2);
         award('swing', ' 荡得高高的！');
+        if (tip) tip('我坐上去啦——帮我推一下 🎠（再点一下还能荡）', 3400);
       },
       say: '荡秋千要有人推我一下'
     });
@@ -1426,16 +1779,20 @@ XD.School = (function () {
       box: [222.9, 0.35, 1.4, 3.3, 0.8, 3.3],
       anchor: [222.9, 0.9, 1.4],
       onClick: function () {
-        if (sfx && sfx.sand) sfx.sand();
-        else if (sfx && sfx.crunch) sfx.crunch();
+        if (sfx && sfx.crunch) sfx.crunch();
+        startAct('sand', 2.0);
         if (!dug) {
           dug = true;
           save();
           if (frames.shell) frames.shell.visible = true;
+          buildCastle(1);
           award('sand', ' 还挖到一枚小贝壳 🐚');
+          if (tip) tip('挖到一枚小贝壳 🐚 沙子堆成了一个小城堡 🏰', 3600);
         } else {
+          sandPile = Math.min(3, sandPile + 1);
+          buildCastle(sandPile);
           award('sand', '');
-          if (tip) tip('沙坑里已经挖过啦，再堆个城堡？🏰', 2800);
+          if (tip) tip(sandPile >= 3 ? '城堡堆到第三层啦，再高要塌了 🏰' : '再加一层！🏰', 3000);
         }
       },
       say: '沙子里有东西——挖挖看'
@@ -1447,7 +1804,10 @@ XD.School = (function () {
       anchor: [226.2, 1.25, 2.0],
       onClick: function () {
         if (sfx && sfx.pop) sfx.pop();
-        if (tip) tip('我坐这头，你坐那头——一上一下 🎢', 3000);
+        seesawKick = 1;
+        startAct('seesaw', 4.0);
+        kidCheer(226.2, 2.0);
+        if (tip) tip('我坐这头——一上一下，翘起来啦 🎢', 3200);
       },
       say: '跷跷板要两个人玩'
     });
@@ -1487,9 +1847,14 @@ XD.School = (function () {
           if (tip) tip('泡泡老师摸摸我的头：「小D今天最棒了，奖状贴在墙上啦。」🏅', 5000);
         } else if (n >= ACTS.length) {
           diploma = true;
+          studiedToday = true;
           save();
           refreshBoard(true);
           if (tip) tip('泡泡老师发小奖状啦 🏅「小D今天五件事全做完了！」——贴在墙上了', 5600);
+        } else if (!isWednesday()) {
+          const left = ACTS.filter(function (a) { return !flowers[a.k]; })
+            .map(function (a) { return a.e + a.n; }).join(' ');
+          if (tip) tip('泡泡老师：「今天不是咱们班的课，周三才发小红花哦」　还差 ' + (ACTS.length - n) + ' 朵', 5200);
         } else {
           const left = ACTS.filter(function (a) { return !flowers[a.k]; })
             .map(function (a) { return a.e + a.n; }).join(' ');
@@ -1499,9 +1864,33 @@ XD.School = (function () {
       say: function () {
         const n = nFlowers();
         if (diploma) return '小D今天五朵小红花全拿到了，真棒 🏅';
-        if (n === 0) return '来，老师带你去院子里玩';
+        if (n === 0) return isWednesday() ? '今天有课，老师带你去院子里玩' : '今天没咱们班的课，随便玩玩吧';
         return '已经 ' + n + ' 朵小红花啦，还差 ' + (ACTS.length - n) + ' 朵';
       }
+    }, teacherHere);
+
+    /* --- 三个小动物同学（只有周三白天在，点它们会跳舞） --- */
+    KID_SPOTS.forEach(function (spot, i) {
+      const info = PET_INFO[spot.pet];
+      add({
+        id: 'school-kid' + i, label: info.name,
+        box: [spot.x, 0.5, spot.z, 1.0, 1.1, 1.0],
+        anchor: [spot.x, 1.25, spot.z],
+        onClick: function () {
+          const k = frames.kids[i];
+          if (k) { playKid(k, 'dance'); k.wait = 2.4; }
+          if (sfx && sfx.blip) sfx.blip();
+          const lines = {
+            panda: '团团：「沙坑里今天能挖到宝贝！」🐼',
+            bunny: '跳跳：「滑梯要排队哦，我排第一个！」🐰',
+            chick: '啾啾：「秋千我来推你，坐稳啦！」🐤'
+          };
+          if (tip) tip(lines[spot.pet] || (info.name + '：「我们一起玩吧！」'), 3600);
+        },
+        say: function () {
+          return info.name + '同学（' + (spot.pet === 'panda' ? '熊猫' : spot.pet === 'bunny' ? '兔子' : '小鸡') + '）';
+        }
+      }, kidsHere);
     });
 
     add({
@@ -1625,6 +2014,31 @@ XD.School = (function () {
       },
       say: function () { return '小红花榜 ' + nFlowers() + '/' + ACTS.length; }
     });
+
+    /* --- 家里的《上学日记》：条件跟幼儿园那几个分开写（在不在家 + 今天是不是周三 + 上没上课） --- */
+    if (interact) {
+      interact.add({
+        id: 'home-diary', label: '上学日记',
+        box: [DIARY_SPOT.x, DIARY_SPOT.y + 0.16, DIARY_SPOT.z, 0.44, 0.34, 0.5],
+        anchor: [DIARY_SPOT.x, DIARY_SPOT.y + 0.46, DIARY_SPOT.z],
+        prio: 3,          // 压在"书桌"那个大热区上面，不然准星永远显示"书桌"
+        when: function () {
+          try {
+            if (isSchoolNow()) return false;                 // 在幼儿园里就别去点家里的日记
+            if (!frames || !frames.diary) return false;
+            return frames.diary.visible === true;            // homeTick 已经算好"今天该不该有"
+          } catch (e) { return false; }
+        },
+        onClick: function () {
+          const pages = diaryPages();
+          if (diaryPage >= pages.length) diaryPage = 0;
+          if (sfx && sfx.paper) sfx.paper();
+          if (tip) tip(pages[diaryPage] + '　（再点一下翻页）', 6200);
+          diaryPage = (diaryPage + 1) % pages.length;
+        },
+        say: '我的上学日记'
+      });
+    }
   }
 
   /* ================= 走动边界 ================= */
@@ -1682,9 +2096,16 @@ XD.School = (function () {
       draws: nPaints(),
       diploma: !!diploma,
       dug: !!dug,
+      castle: dug ? 1 + sandPile : 0,
       act: act.name,
-      kids: frames && frames.kids ? frames.kids.length : 0,
-      teacher: !!(frames && frames.teacher)
+      kids: frames && frames.kids ? frames.kids.map(function (k) { return k.pet; }) : [],
+      kidsAnims: frames && frames.kids && frames.kids[0] && frames.kids[0].actions
+        ? Object.keys(frames.kids[0].actions).length : 0,
+      kidsHere: kidsHere(),
+      teacherHere: teacherHere(),
+      wednesday: isWednesday(),
+      day: isDayTime(),
+      diary: !!(frames && frames.diary && frames.diary.visible)
     };
   }
 
@@ -1713,6 +2134,7 @@ XD.School = (function () {
     buildClassroom();
     buildYard();
     buildPeople();
+    buildDiary();
 
     // 存档：读取后把墙面/沙坑/奖状一次性摆对
     load();
@@ -1721,22 +2143,25 @@ XD.School = (function () {
 
     register();
 
-    // 调试：?schoolreset=1 清档重来（截图用）
+    // 调试：?schoolreset=1 清档重来（截图用）；?wed=1 把"今天"当周三（妈妈想看上学日记那天）
     try {
       const q = new URLSearchParams(location.search);
+      FORCE_WED = q.has('wed');
       if (q.has('schoolreset')) {
         try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
         for (let k in flowers) delete flowers[k];
         for (let i = 0; i < paints.length; i++) paints[i] = 0;
-        paintNext = 0; diploma = false; dug = false;
+        paintNext = 0; diploma = false; dug = false; sandPile = 0;
         refreshBoard(false);
       }
     } catch (e) { /* 无所谓 */ }
+    applyPeopleTime();
 
     return {
       root: root,
       setVisible: function (v) {
         if (root) root.visible = !!v;
+        if (v) { visitedToday = true; applyPeopleTime(); }
         if (!v && frames && frames.me) { frames.me.visible = false; act.name = ''; }
         if (!v) { cool = 0; }
       },
@@ -1744,9 +2169,18 @@ XD.School = (function () {
       clamp: clamp,
       spawn: SPAWN,
       spawnOutside: SPAWN,
+      /* 家里那本《上学日记》：只有周三上过课才摆出来（main.js 每帧问一声，很轻） */
+      homeTick: function (venue) { homeTick(venue); },
       debug: debug,
       // 试玩/测试用：直接看小红花状态
-      state: function () { return { flowers: nFlowers(), diploma: !!diploma, draws: nPaints(), dug: !!dug }; }
+      state: function () {
+        return {
+          flowers: nFlowers(), diploma: !!diploma, draws: nPaints(), dug: !!dug,
+          castle: dug ? 1 + sandPile : 0, kids: frames && frames.kids ? frames.kids.length : 0,
+          kidsHere: kidsHere(), teacherHere: teacherHere(), wednesday: isWednesday(),
+          diary: !!(frames && frames.diary && frames.diary.visible)
+        };
+      }
     };
   }
 
@@ -1758,6 +2192,7 @@ XD.School = (function () {
       clamp: function (x, z) { return { x: x, z: z }; },
       spawn: SPAWN,
       spawnOutside: SPAWN,
+      homeTick: function () {},
       debug: function () { return null; },
       state: function () { return null; }
     };
