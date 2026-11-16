@@ -177,7 +177,7 @@ XD.Touch = (function () {
     if (!el) return;
     el.addEventListener('pointerdown', function (e) {
       if (!on || busy()) return;
-      if (e.pointerType === 'mouse') return;      // 手机模式里鼠标还按老路子走
+      if (e.pointerType === 'mouse' && force !== true) return;   // 真手机上鼠标还按老路子走；?touch=1 调试时允许鼠标拖摇杆
       if (e.button !== undefined && e.button !== 0) return;
       e.preventDefault();
       try { el.setPointerCapture(e.pointerId); } catch (err) {}
@@ -235,6 +235,19 @@ XD.Touch = (function () {
     rotEl.textContent = HINT_ROT;
     document.body.appendChild(rotEl);
 
+    /* 最主要的那个按钮：走进去 / 出来 —— 竖屏时视角条会横向滑，它可能滑出屏幕，
+     * 所以单独固定在底部中间（走起来就变成「出来」）。 */
+    const actEl = document.createElement('div');
+    actEl.id = 'tact';
+    actEl.innerHTML = '<b id="tactlbl">🚶 走进去</b>';
+    document.body.appendChild(actEl);
+    els.act = actEl;
+    els.actLbl = actEl.querySelector('#tactlbl');
+    actEl.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (ctx && ctx.view) ctx.view('walk');
+    });
+
     els.pad = pad;
     els.hint = document.getElementById('thint');
     els.stick = document.getElementById('tstick');
@@ -281,6 +294,7 @@ XD.Touch = (function () {
     if (walking !== lastWalk) {
       lastWalk = walking;
       if (els.pad) els.pad.classList.toggle('on', walking);
+      if (els.actLbl) els.actLbl.textContent = walking ? '🚪 出来' : '🚶 走进去';
       if (walking) {
         if (!walkHinted) { walkHinted = true; toast(HINT_WALK); }
         else toast('🕹 左下摇杆走路　·　右边滑动看');
