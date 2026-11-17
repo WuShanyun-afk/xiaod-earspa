@@ -11,9 +11,10 @@
  *   教室里：画画（画完真的贴在墙上，还会存下来）/ 搭积木 / 听绘本 / 睡午觉 / 洗手
  *   主角：泡泡老师（奶白小鲸，圆眼镜 + 围裙 + 抱着一本图画书）
  *
- * 存档：localStorage 'xd_school_v1'（小红花 / 墙上那几张画 / 奖状 / 沙坑里的贝壳）
+ * 存档：localStorage 'xd_school_v1'
+ *   （小红花 f / 墙上那几张画 p / 奖状 c / 沙坑贝壳 g / 城堡层数 k / 和同学的熟悉度 b）
  *
- * 调试：?venue=school 直接站到院子里；?schoolreset=1 清掉存档重来（截图用）
+ * 调试：?venue=school 直接站到院子里；?schoolreset=1 清掉存档重来（截图用）；?wed=1 当周三
  */
 window.XD = window.XD || {};
 
@@ -59,6 +60,87 @@ XD.School = (function () {
     { pet: 'chick', x: 231.4, z: 2.6, ry: 2.2, act: 'swing' }    // 秋千边上
   ];
 
+  /* ================= M82.2 小动物的台词本 + 熟悉度 =================
+   * 妈妈：「要不要再给三只小动物加一句自己的台词本？比如团团爱挖沙、跳跳怕高、
+   *   啾啾话最多 —— 点多了会越来越熟那种」→ 好。
+   *
+   * 性格：
+   *   团团（熊猫）慢悠悠、爱挖沙、认真、贪吃
+   *   跳跳（兔子）嘴硬但怕高、爱排队、爱数数
+   *   啾啾（小鸡）话最多、爱推秋千、问不完的问题
+   *
+   * 熟悉度按"聊过几次"算：0 刚认识 → 3 认识了 → 8 好朋友 → 15 最好的朋友。
+   * 每升一级换一套话，越熟越"自己人"；刚玩完它守着的那个玩具，
+   * 它会先接着刚才那件事说（hot 那句）。进度写进存档，明天再来还是这么熟。
+   */
+  const BOND_STEPS = [0, 3, 8, 15];
+  const BOND_TITLE = ['刚认识', '认识了', '好朋友', '最好的朋友'];
+  const KID_CHAT = {
+    panda: {
+      kind: '熊猫', e: '🐼',
+      up: ['我们算认识啦！我叫团团，你叫小D，我记住了。',
+        '我们现在是朋友了——拉钩，不许忘了我的名字。',
+        '你是我最好的朋友。我的铲子分你一半，真的。'],
+      hot: '你刚才挖的那一铲，沙子一点都没溅出来，厉害。',
+      lines: [
+        ['你好呀，我叫团团。我在挖沙子，你要一起吗？',
+          '这把铲子借你，挖的时候轻一点，下面有东西。',
+          '沙子是软的，踩上去会陷进去一点点，像走在云上。'],
+        ['我挖到一块特别圆的石头，本来以为是贝壳……',
+          '沙坑再往下会变湿，湿湿的沙就到水边啦。',
+          '我今天数了，沙坑里一共有十七块石头，我踢出去两块。'],
+        ['城堡最高那一层我给你留着，小旗子你去插。',
+          '上次你的城堡被风吹塌了，我又堆了一个，这次更结实。',
+          '等城堡堆到三层，我给它挖条护城河，用水桶浇水。'],
+        ['妈妈问我幼儿园最好的朋友是谁，我说是小D。',
+          '放学我带你去我藏贝壳的地方，谁都不告诉。',
+          '我有一个特别好看的贝壳想送你，但是忘在家里了。']
+      ]
+    },
+    bunny: {
+      kind: '兔子', e: '🐰',
+      up: ['我们算认识啦！我叫跳跳，我跳得可高了。',
+        '我们是朋友了，那我告诉你一个秘密，你别笑我。',
+        '你是我最好的朋友了。以后滑梯我不跟你抢。'],
+      hot: '刚才你滑下来我数了，两秒！我在下面一直看着。',
+      lines: [
+        ['滑梯要排队哦，我排第一个！',
+          '我跳得可高了，你看——诶，等一下，我鞋带开了。',
+          '你看我这双鞋，跑起来会响，一跑就响。'],
+        ['我其实……不太敢从最高的地方往下看。你别告诉别人。',
+          '但是滑下来那一下很好玩，我都是闭着眼睛滑的。',
+          '滑梯最高的地方有风，风一吹我耳朵就竖起来。'],
+        ['你在上面的时候我在下面接你，我数到三你就滑——一、二……',
+          '我今天滑了七次，比昨天多两次，我数着的。',
+          '我教你一个滑得快的办法：手举起来，脚并好。'],
+        ['以前滑梯我一个人不敢上去，现在你在上面我就不怕了。',
+          '我把滑得最快的那个位置让给你，我排第二个。',
+          '老师问谁想当排队小队长，我举手了，因为可以站第一个。']
+      ]
+    },
+    chick: {
+      kind: '小鸡', e: '🐤',
+      up: ['我们算认识啦！我叫啾啾，你叫什么来着——啊，小D！',
+        '我们是好朋友了！我要跟你讲好多好多话。',
+        '你是我最好的朋友。这个我只告诉你一个人哦。'],
+      hot: '刚才荡得好高啊！我推的时候一直看着你，怕你飞出去。',
+      lines: [
+        ['秋千我来推你，坐稳啦！',
+          '你今天怎么来这么晚呀？我都问老师三次了。',
+          '我叫啾啾，因为我叫起来是啾啾啾，你听——啾啾！'],
+        ['我跟你讲，我早上看到一只蝴蝶，是黄色的，后来它飞走了……',
+          '你猜我中午吃了什么？你猜三次，我给你三次机会。',
+          '我数过了，滑梯有十二个台阶，秋千的链子有三十九节。'],
+        ['我推秋千推得最好，因为我数着数推，一推一推特别稳。',
+          '你要不要听我讲一个很长很长的故事？特别长。',
+          '我给你编了一个秋千歌：一荡高高，二荡远远，三荡看见云……'],
+        ['我一天里最开心的时候，就是你来的时候。',
+          '我话是不是太多了？妈妈说等我说完她再说。',
+          '我把你画在我的小本子上了，画得不太像，但我知道那是你。']
+      ]
+    }
+  };
+
   /* ================= 状态 ================= */
   let root = null, scene = null, interact = null, sfx = null, tip = null;
   let isSchoolNow = function () { return false; };
@@ -81,6 +163,8 @@ XD.School = (function () {
   let act = { name: '', t: 0, dur: 0 };   // 正在演的小动作（小D自己跑一遍）
   let swingKick = 0, seesawKick = 0;      // 秋千 / 跷跷板被"点着玩"的时候荡得更欢
   let sandPile = 0;                       // 沙坑里那个城堡堆到第几层
+  const bonds = { panda: 0, bunny: 0, chick: 0 };   // 和每只小动物聊过几次（存档 b）
+  let lastPlay = { k: '', at: -999 };               // 小D刚才玩了什么（小动物会接着这个话题聊）
 
   /* ================= 时间条件（分开写，每处自己判断自己那一份） =================
    * 妈妈：「晚上应该不在幼儿园，所以要修改触发条件」「你只有周三会上课」
@@ -1381,6 +1465,130 @@ XD.School = (function () {
     k.wait = 2.0;
   }
 
+  /* ---------- 熟悉度：聊过几次 → 到第几级 ---------- */
+  function bondLevel(pet) {
+    const n = bonds[pet] | 0;
+    let lv = 0;
+    for (let i = 0; i < BOND_STEPS.length; i++) if (n >= BOND_STEPS[i]) lv = i;
+    return lv;
+  }
+  function bondTitle(pet) {
+    return BOND_TITLE[bondLevel(pet)] || BOND_TITLE[0];
+  }
+
+  /* 飘起来的几颗小爱心（变成好朋友的时候有、平时偶尔一颗） */
+  function heartTex() {
+    if (TEX.heart) return TEX.heart;
+    TEX.heart = tex(64, 64, function (g, W, H) {
+      g.clearRect(0, 0, W, H);
+      const cx = W / 2;
+      g.beginPath();
+      g.moveTo(cx, H * 0.88);
+      g.bezierCurveTo(W * 0.02, H * 0.52, W * 0.18, H * 0.06, cx, H * 0.30);
+      g.bezierCurveTo(W * 0.82, H * 0.06, W * 0.98, H * 0.52, cx, H * 0.88);
+      g.fillStyle = '#ff92a9';
+      g.fill();
+      g.lineWidth = 3;
+      g.strokeStyle = 'rgba(196,66,96,0.55)';
+      g.stroke();
+    });
+    return TEX.heart;
+  }
+  function kidHearts(i, n) {
+    if (!root || !frames || !frames.kids || !frames.kids[i]) return;
+    const cnt = n === 0 ? 0 : (n || 1);
+    if (!cnt) return;
+    const kid = frames.kids[i];
+    const ht = heartTex();
+    if (!ht) return;
+    frames.hearts = frames.hearts || [];
+    if (frames.hearts.length > 24) return;      // 别一下子飘一屏
+    const wp = new THREE.Vector3();
+    kid.g.getWorldPosition(wp);
+    root.worldToLocal(wp);
+    for (let j = 0; j < cnt; j++) {
+      try {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: ht, transparent: true, depthWrite: false, opacity: 0.96
+        }));
+        const s = 0.19 + Math.random() * 0.07;
+        sp.scale.set(s, s, 1);
+        sp.position.set(
+          wp.x + (Math.random() - 0.5) * 0.36,
+          wp.y + 0.95 + Math.random() * 0.2,
+          wp.z + (Math.random() - 0.5) * 0.36
+        );
+        sp.userData.t = -j * 0.16;
+        sp.userData.life = 1.5 + Math.random() * 0.5;
+        sp.userData.vy = 0.4 + Math.random() * 0.18;
+        sp.visible = false;
+        root.add(sp);
+        frames.hearts.push(sp);
+      } catch (e) { /* 没有 Sprite 就算了，别影响玩 */ }
+    }
+  }
+
+  /* 一轮把这一级的话都说完再重复（洗成一摞，一张一张抽） */
+  function nextLine(kid, pool, lv) {
+    if (!kid) return pool[Math.floor(Math.random() * pool.length)];
+    kid.bags = kid.bags || {};
+    let bag = kid.bags[lv];
+    if (!bag || !bag.length) {
+      bag = pool.slice();
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = bag[i]; bag[i] = bag[j]; bag[j] = tmp;
+      }
+      // 新一轮的第一句别正好接着上一句
+      if (bag.length > 1 && bag[0] === kid.lastSaid) {
+        const tmp = bag[0]; bag[0] = bag[bag.length - 1]; bag[bag.length - 1] = tmp;
+      }
+      kid.bags[lv] = bag;
+    }
+    return bag.shift();
+  }
+
+  /* 点一下小动物：聊一句、熟一点；跨过门槛就说那句"升级"的话 + 飘几颗心 */
+  function kidTalk(i) {
+    const spot = KID_SPOTS[i];
+    if (!spot) return '';
+    const chat = KID_CHAT[spot.pet];
+    if (!chat) return '';
+    const info = PET_INFO[spot.pet] || { name: spot.pet, e: '' };
+    const kid = frames && frames.kids ? frames.kids[i] : null;
+    if (kid) { playKid(kid, 'dance'); kid.wait = 2.4; }
+
+    const before = bondLevel(spot.pet);
+    bonds[spot.pet] = (bonds[spot.pet] | 0) + 1;
+    const after = bondLevel(spot.pet);
+    save();
+
+    let line;
+    if (after > before) {
+      // 刚变熟：说升级那句，多飘几颗心
+      line = chat.up[after - 1] || chat.up[0];
+      kidHearts(i, 3);
+      if (sfx && sfx.chime) sfx.chime();
+    } else {
+      const fresh = spot.act && lastPlay.k === spot.act && (t - lastPlay.at) < 90;
+      if (fresh) {
+        line = chat.hot;
+        lastPlay.k = '';        // 这句只接话一次，别一直重复
+      } else {
+        const pool = chat.lines[after] || chat.lines[0];
+        // 别连着说同一句：一轮把这级的话说完再重复，不然点多了就像复读机
+        line = nextLine(kid, pool, after);
+      }
+      kidHearts(i, Math.random() < 0.45 ? 1 : 0);
+      if (sfx && sfx.blip) sfx.blip();
+    }
+    if (kid) kid.lastSaid = line;
+
+    const who = info.name + '：「' + line + '」' + (chat.e || '');
+    if (after > before) return who + '　💛 和' + info.name + '成了「' + BOND_TITLE[after] + '」';
+    return who;
+  }
+
   /* 人什么时候在：老师白天在 / 同学只有周三白天来（晚上一个人都没有） */
   function applyPeopleTime() {
     if (!frames) return;
@@ -1437,7 +1645,8 @@ XD.School = (function () {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         f: Object.keys(flowers), p: paints.slice(), c: diploma ? 1 : 0,
-        g: dug ? 1 : 0, k: sandPile
+        g: dug ? 1 : 0, k: sandPile,
+        b: { panda: bonds.panda | 0, bunny: bonds.bunny | 0, chick: bonds.chick | 0 }
       }));
     } catch (e) { /* 隐私模式下存不了也无所谓 */ }
   }
@@ -1451,6 +1660,11 @@ XD.School = (function () {
     diploma = !!s.c;
     dug = !!s.g;
     sandPile = Math.max(0, Math.min(3, s.k | 0));
+    // 和同学熟到哪儿了（老存档没这个字段就当刚认识）
+    const b = s.b || {};
+    bonds.panda = Math.max(0, b.panda | 0);
+    bonds.bunny = Math.max(0, b.bunny | 0);
+    bonds.chick = Math.max(0, b.chick | 0);
     // 下次从"第一个空框"开始挂
     paintNext = 0;
     for (let i = 0; i < paints.length; i++) if (!paints[i]) { paintNext = i; break; }
@@ -1543,6 +1757,8 @@ XD.School = (function () {
     act.name = name;
     act.t = 0;
     act.dur = dur;
+    lastPlay.k = name;      // 小动物会记住小D刚才玩了什么，下一句话就接这个
+    lastPlay.at = t;
     frames.me.visible = true;
   }
 
@@ -1688,6 +1904,32 @@ XD.School = (function () {
         tickKid(k, dt);
         // 走路时轻轻颠一下（GLB 自己也有 walk 动画，这里给一点点额外的弹性）
         if (k.mode === 'walk') k.g.position.y = Math.abs(Math.sin(t * 7 + k.phase)) * 0.05;
+        // 小D 走近了（3.5m 内），没在走路的那只会慢慢转过头看你
+        if (k.mode !== 'walk' && camPos) {
+          const dx = camPos.x - k.g.position.x, dz = camPos.z - k.g.position.z;
+          if (dx * dx + dz * dz < 12.25) {
+            let diff = Math.atan2(dx, dz) - k.g.rotation.y;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            k.g.rotation.y += diff * Math.min(1, dt * 2.2);
+          }
+        }
+      }
+    }
+    // 和同学变熟时飘上来的小爱心
+    if (frames.hearts && frames.hearts.length) {      for (let i = frames.hearts.length - 1; i >= 0; i--) {
+        const h = frames.hearts[i];
+        h.userData.t += dt;
+        const q = h.userData.t / h.userData.life;
+        if (q < 0) continue;                       // 排队出来的那几颗先等一等
+        h.visible = true;
+        h.position.y += h.userData.vy * dt;
+        h.position.x += Math.sin(h.userData.t * 5.5 + i) * 0.16 * dt;
+        h.material.opacity = q < 0.12 ? q / 0.12 : Math.max(0, 1 - Math.pow((q - 0.12) / 0.88, 1.5));
+        if (q >= 1) {
+          try { root.remove(h); h.material.dispose(); } catch (e) { }
+          frames.hearts.splice(i, 1);
+        }
       }
     }
     // 老师白天在、晚上回家；同学周三白天在
@@ -1869,26 +2111,20 @@ XD.School = (function () {
       }
     }, teacherHere);
 
-    /* --- 三个小动物同学（只有周三白天在，点它们会跳舞） --- */
+    /* --- 三个小动物同学（只有周三白天在，点它们会聊天、越聊越熟） --- */
     KID_SPOTS.forEach(function (spot, i) {
       const info = PET_INFO[spot.pet];
+      const chat = KID_CHAT[spot.pet] || { kind: '动物', e: '' };
       add({
         id: 'school-kid' + i, label: info.name,
         box: [spot.x, 0.5, spot.z, 1.0, 1.1, 1.0],
         anchor: [spot.x, 1.25, spot.z],
         onClick: function () {
-          const k = frames.kids[i];
-          if (k) { playKid(k, 'dance'); k.wait = 2.4; }
-          if (sfx && sfx.blip) sfx.blip();
-          const lines = {
-            panda: '团团：「沙坑里今天能挖到宝贝！」🐼',
-            bunny: '跳跳：「滑梯要排队哦，我排第一个！」🐰',
-            chick: '啾啾：「秋千我来推你，坐稳啦！」🐤'
-          };
-          if (tip) tip(lines[spot.pet] || (info.name + '：「我们一起玩吧！」'), 3600);
+          const line = kidTalk(i);
+          if (line && tip) tip(line, 4200);
         },
         say: function () {
-          return info.name + '同学（' + (spot.pet === 'panda' ? '熊猫' : spot.pet === 'bunny' ? '兔子' : '小鸡') + '）';
+          return info.name + '（' + chat.kind + '）· ' + bondTitle(spot.pet);
         }
       }, kidsHere);
     });
@@ -2101,6 +2337,11 @@ XD.School = (function () {
       kids: frames && frames.kids ? frames.kids.map(function (k) { return k.pet; }) : [],
       kidsAnims: frames && frames.kids && frames.kids[0] && frames.kids[0].actions
         ? Object.keys(frames.kids[0].actions).length : 0,
+      bonds: { panda: bonds.panda | 0, bunny: bonds.bunny | 0, chick: bonds.chick | 0 },
+      levels: { panda: bondLevel('panda'), bunny: bondLevel('bunny'), chick: bondLevel('chick') },
+      titles: { panda: bondTitle('panda'), bunny: bondTitle('bunny'), chick: bondTitle('chick') },
+      hearts: frames && frames.hearts ? frames.hearts.length : 0,
+      lastPlay: lastPlay.k,
       kidsHere: kidsHere(),
       teacherHere: teacherHere(),
       wednesday: isWednesday(),
@@ -2121,7 +2362,7 @@ XD.School = (function () {
     onDoor = o.onDoor || function () {};
     if (!scene) return fallback();
 
-    frames = { windmills: [], lamps: [], petals: [], draws: [], kids: [], swingSeats: [] };
+    frames = { windmills: [], lamps: [], petals: [], draws: [], kids: [], swingSeats: [], hearts: [] };
 
     root = new THREE.Group();
     root.name = 'school-m82';
@@ -2152,6 +2393,7 @@ XD.School = (function () {
         for (let k in flowers) delete flowers[k];
         for (let i = 0; i < paints.length; i++) paints[i] = 0;
         paintNext = 0; diploma = false; dug = false; sandPile = 0;
+        bonds.panda = 0; bonds.bunny = 0; bonds.chick = 0;
         refreshBoard(false);
       }
     } catch (e) { /* 无所谓 */ }
@@ -2164,6 +2406,13 @@ XD.School = (function () {
         if (v) { visitedToday = true; applyPeopleTime(); }
         if (!v && frames && frames.me) { frames.me.visible = false; act.name = ''; }
         if (!v) { cool = 0; }
+        // 走的时候把还在飘的小爱心收掉，别攒着
+        if (!v && frames && frames.hearts && frames.hearts.length) {
+          for (let i = 0; i < frames.hearts.length; i++) {
+            try { root.remove(frames.hearts[i]); } catch (e) { }
+          }
+          frames.hearts.length = 0;
+        }
       },
       update: update,
       clamp: clamp,
