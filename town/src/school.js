@@ -1310,21 +1310,41 @@ XD.School = (function () {
   }
 
   /* ================= 小动物：加载 + 站位 + 自己的小日子 ================= */
+  /* M82.2：模型下载卡住过一次（手机上尤其容易：CDN 边缘还在同步时，gzip 那条链接会一直挂着），
+   * 所以每条都带"超时 → 换一个带 ?r= 的链接再来"的重试，每条只算一次成败。 */
   function loadPets() {
     if (!THREE.GLTFLoader) return;
     const loader = new THREE.GLTFLoader();
     PET_FILES.forEach(function (n) {
       petsAsked++;
-      loader.load('assets/models/pets/animal-' + n + '.glb', function (g) {
-        PETS[n] = { scene: g.scene, clips: g.animations || [] };
-        petsLoaded++;
-        if (petsLoaded >= petsAsked) buildKids();
-      }, undefined, function (e) {
-        petsLoaded++;
-        if (window.console) console.warn('[鲸幼园] 小动物没加载出来：', n, e && e.message);
-        if (petsLoaded >= petsAsked) buildKids();
-      });
+      loadPet(loader, n, 0);
     });
+  }
+  function loadPet(loader, n, attempt) {
+    let done = false;
+    const url = 'assets/models/pets/animal-' + n + '.glb' + (attempt ? '?r=' + attempt : '');
+    const giveUp = function (why) {
+      if (done) return;
+      done = true;
+      if (attempt < 2) {
+        if (window.console) console.warn('[鲸幼园] 小动物模型' + why + '，换条链接再试：', n);
+        loadPet(loader, n, attempt + 1);
+        return;
+      }
+      petsLoaded++;
+      if (window.console) console.warn('[鲸幼园] 小动物没加载出来：', n, why);
+      if (petsLoaded >= petsAsked) buildKids();
+    };
+    loader.load(url, function (g) {
+      if (done) return;
+      done = true;
+      PETS[n] = { scene: g.scene, clips: g.animations || [] };
+      petsLoaded++;
+      if (petsLoaded >= petsAsked) buildKids();
+    }, undefined, function (e) {
+      giveUp((e && e.message) || '下载失败');
+    });
+    setTimeout(function () { giveUp('超时'); }, 12000 + attempt * 8000);
   }
 
   function buildKids() {
@@ -2409,7 +2429,7 @@ XD.School = (function () {
         // 走的时候把还在飘的小爱心收掉，别攒着
         if (!v && frames && frames.hearts && frames.hearts.length) {
           for (let i = 0; i < frames.hearts.length; i++) {
-            try { root.remove(frames.hearts[i]); } catch (e) { }
+            try { root.remove(frames.hearts[i]); frames.hearts[i].material.dispose(); } catch (e) { }
           }
           frames.hearts.length = 0;
         }
